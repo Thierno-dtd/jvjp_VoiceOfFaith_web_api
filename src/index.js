@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const { swaggerSpec, swaggerUi } = require("./swagger");
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -28,6 +29,8 @@ const statsRoutes = require('./routes/stats.routes');
 const liveRoutes = require('./routes/live.routes');
 
 const app = express();
+
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Middleware
 app.use(helmet());
