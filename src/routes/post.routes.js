@@ -7,9 +7,45 @@ const { uploadFileToStorage } = require('../services/storage.service');
 const { sendNotificationToTopic } = require('../services/notification.service');
 
 /**
- * POST /api/posts
- * Créer un nouveau post (image ou vidéo)
+ * @swagger
+ * tags:
+ *   name: Posts
+ *   description: Gestion des posts (images et vidéos)
  */
+
+
+/**
+ * @swagger
+ * /api/posts:
+ *   post:
+ *     summary: Créer un nouveau post
+ *     tags: [Posts]
+ *     consumes:
+ *       - multipart/form-data
+ *     parameters:
+ *       - in: formData
+ *         name: media
+ *         type: file
+ *         required: true
+ *       - in: formData
+ *         name: type
+ *         required: true
+ *         type: string
+ *         enum: [image, video]
+ *       - in: formData
+ *         name: category
+ *         required: true
+ *         type: string
+ *         enum: [pensee, pasteur, media]
+ *       - in: formData
+ *         name: content
+ *         required: true
+ *         type: string
+ *     responses:
+ *       201:
+ *         description: Post created successfully
+ */
+
 router.post(
   '/',
   verifyModeratorToken,
@@ -85,8 +121,27 @@ router.post(
 );
 
 /**
- * GET /api/posts
- * Récupérer tous les posts
+ * @swagger
+ * /api/posts:
+ *   get:
+ *     summary: Récupérer tous les posts
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         type: integer
+ *       - in: query
+ *         name: page
+ *         type: integer
+ *       - in: query
+ *         name: category
+ *         type: string
+ *       - in: query
+ *         name: authorId
+ *         type: string
+ *     responses:
+ *       200:
+ *         description: Liste des posts
  */
 router.get('/', async (req, res) => {
   try {
@@ -134,8 +189,22 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/posts/:id
- * Récupérer un post spécifique
+ * @swagger
+ * /api/posts/{id}:
+ *   get:
+ *     summary: Récupérer un post spécifique
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         type: string
+ *         description: ID du post
+ *     responses:
+ *       200:
+ *         description: Post trouvé
+ *       404:
+ *         description: Post non trouvé
  */
 router.get('/:id', async (req, res) => {
   try {
@@ -169,8 +238,34 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * PUT /api/posts/:id
- * Modifier un post
+ * @swagger
+ * /api/posts/{id}:
+ *   put:
+ *     summary: Modifier un post existant
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         type: string
+ *         description: ID du post
+ *       - in: body
+ *         name: body
+ *         required: true
+ *         description: Nouveau contenu du post
+ *         schema:
+ *           type: object
+ *           properties:
+ *             content:
+ *               type: string
+ *               example: Nouveau contenu du post
+ *     responses:
+ *       200:
+ *         description: Post modifié avec succès
+ *       403:
+ *         description: Accès interdit
+ *       404:
+ *         description: Post non trouvé
  */
 router.put(
   '/:id',
@@ -213,8 +308,24 @@ router.put(
 );
 
 /**
- * DELETE /api/posts/:id
- * Supprimer un post
+ * @swagger
+ * /api/posts/{id}:
+ *   delete:
+ *     summary: Supprimer un post
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         type: string
+ *         description: ID du post à supprimer
+ *     responses:
+ *       200:
+ *         description: Post supprimé avec succès
+ *       403:
+ *         description: Accès interdit
+ *       404:
+ *         description: Post non trouvé
  */
 router.delete('/:id', verifyModeratorToken, async (req, res) => {
   try {
@@ -246,8 +357,22 @@ router.delete('/:id', verifyModeratorToken, async (req, res) => {
 });
 
 /**
- * POST /api/posts/:id/like
- * Liker un post
+ * @swagger
+ * /api/posts/{id}/like:
+ *   post:
+ *     summary: Liker un post
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         type: string
+ *         description: ID du post à liker
+ *     responses:
+ *       200:
+ *         description: Like ajouté avec succès
+ *       404:
+ *         description: Post non trouvé
  */
 router.post('/:id/like', async (req, res) => {
   try {

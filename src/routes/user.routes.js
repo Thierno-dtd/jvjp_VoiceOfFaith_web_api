@@ -5,12 +5,49 @@ const { v4: uuidv4 } = require('uuid');
 const { sendInvitationEmail } = require('../services/email.service');
 const { verifyAdminToken } = require('../middleware/auth.middleware');
 
-// Middleware pour vérifier que l'utilisateur est admin
+// Middleware admin
 router.use(verifyAdminToken);
 
 /**
- * POST /api/admin/users/invite
- * Créer un compte pasteur ou media et envoyer email d'invitation
+ * @swagger
+ * tags:
+ *   name: AdminUsers
+ *   description: Gestion des utilisateurs (admin)
+ */
+
+/**
+ * @swagger
+ * /api/admin/users/invite:
+ *   post:
+ *     summary: Inviter un pasteur ou un membre média
+ *     tags: [AdminUsers]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, role, displayName]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "john@example.com"
+ *               role:
+ *                 type: string
+ *                 enum: [pasteur, media]
+ *                 example: "pasteur"
+ *               displayName:
+ *                 type: string
+ *                 example: "John Doe"
+ *     responses:
+ *       201:
+ *         description: Utilisateur invité avec succès
+ *       400:
+ *         description: Erreur de validation ou utilisateur existe déjà
+ *       500:
+ *         description: Erreur serveur
  */
 router.post(
   '/invite',
@@ -30,21 +67,17 @@ router.post(
       const auth = req.app.locals.auth;
       const db = req.app.locals.db;
 
-      // Vérifier si l'email existe déjà
+      // Vérifier si l'utilisateur existe
       try {
         await auth.getUserByEmail(email);
-        return res.status(400).json({ 
-          error: 'User with this email already exists' 
+        return res.status(400).json({
+          error: 'User with this email already exists'
         });
-      } catch (error) {
-        // L'utilisateur n'existe pas, on continue
-      }
+      } catch (error) {}
 
-      // Générer mot de passe temporaire
       const tempPassword = uuidv4().substring(0, 12);
       const inviteToken = uuidv4();
 
-      // Créer l'utilisateur dans Firebase Auth
       const userRecord = await auth.createUser({
         email,
         password: tempPassword,
@@ -52,7 +85,6 @@ router.post(
         emailVerified: false
       });
 
-      // Créer le document dans Firestore
       await db.collection('users').doc(userRecord.uid).set({
         email,
         displayName,
@@ -66,7 +98,6 @@ router.post(
         invitedAt: new Date()
       });
 
-      // Envoyer l'email d'invitation
       await sendInvitationEmail({
         email,
         displayName,
@@ -82,17 +113,44 @@ router.post(
 
     } catch (error) {
       console.error('Error inviting user:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to invite user',
-        message: error.message 
+        message: error.message
       });
     }
   }
 );
 
 /**
- * GET /api/admin/users
- * Récupérer la liste de tous les utilisateurs
+ * @swagger
+ * /api/admin/users:
+ *   get:
+ *     summary: Récupérer la liste de tous les utilisateurs
+ *     tags: [AdminUsers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: role
+ *         in: query
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [user, pasteur, media, admin]
+ *       - name: limit
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *       - name: page
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *     responses:
+ *       200:
+ *         description: Liste des utilisateurs
+ *       500:
+ *         description: Erreur serveur
  */
 router.get('/', async (req, res) => {
   try {
@@ -120,7 +178,6 @@ router.get('/', async (req, res) => {
       });
     });
 
-    // Compter le total
     const totalSnapshot = await query.count().get();
     const total = totalSnapshot.data().count;
 
@@ -141,8 +198,37 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * PUT /api/admin/users/:id/role
- * Changer le rôle d'un utilisateur
+ * @swagger
+ * /api/admin/users/{id}/role:
+ *   put:
+ *     summary: Modifier le rôle d’un utilisateur
+ *     tags: [AdminUsers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [role]
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [user, pasteur, media, admin]
+ *     responses:
+ *       200:
+ *         description: Rôle modifié avec succès
+ *       400:
+ *         description: Mauvaise requête
+ *       500:
+ *         description: Erreur serveur
  */
 router.put(
   '/:id/role',
@@ -176,8 +262,26 @@ router.put(
 );
 
 /**
- * POST /api/admin/users/:id/resend
- * Renvoyer l'email d'invitation
+ * @swagger
+ * /api/admin/users/{id}/resend:
+ *   post:
+ *     summary: Renvoyer l’invitation à un utilisateur
+ *     tags: [AdminUsers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Invitation renvoyée
+ *       404:
+ *         description: Utilisateur introuvable
+ *       500:
+ *         description: Erreur serveur
  */
 router.post('/:id/resend', async (req, res) => {
   try {
@@ -185,22 +289,20 @@ router.post('/:id/resend', async (req, res) => {
     const db = req.app.locals.db;
 
     const userDoc = await db.collection('users').doc(id).get();
-    
+
     if (!userDoc.exists) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     const userData = userDoc.data();
 
-    // Générer nouveau token
     const newInviteToken = uuidv4();
-    
+
     await db.collection('users').doc(id).update({
       inviteToken: newInviteToken,
       inviteResendAt: new Date()
     });
 
-    // Renvoyer l'email
     await sendInvitationEmail({
       email: userData.email,
       displayName: userData.displayName,
@@ -220,8 +322,24 @@ router.post('/:id/resend', async (req, res) => {
 });
 
 /**
- * DELETE /api/admin/users/:id
- * Supprimer un utilisateur
+ * @swagger
+ * /api/admin/users/{id}:
+ *   delete:
+ *     summary: Supprimer un utilisateur
+ *     tags: [AdminUsers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Utilisateur supprimé
+ *       500:
+ *         description: Erreur serveur
  */
 router.delete('/:id', async (req, res) => {
   try {
@@ -229,10 +347,7 @@ router.delete('/:id', async (req, res) => {
     const auth = req.app.locals.auth;
     const db = req.app.locals.db;
 
-    // Supprimer de Firebase Auth
     await auth.deleteUser(id);
-
-    // Supprimer de Firestore
     await db.collection('users').doc(id).delete();
 
     res.json({

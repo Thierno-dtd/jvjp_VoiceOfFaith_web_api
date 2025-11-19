@@ -6,10 +6,49 @@ const { uploadSermon } = require('../middleware/upload.middleware');
 const { uploadFileToStorage } = require('../services/storage.service');
 const { sendNotificationToTopic } = require('../services/notification.service');
 
+
 /**
- * POST /api/sermons
- * Upload un nouveau sermon (image + PDF)
+ * @swagger
+ * tags:
+ *   name: Sermons
+ *   description: Gestion des sermons
  */
+
+/**
+ * @swagger
+ * /api/sermons:
+ *   post:
+ *     summary: Upload un nouveau sermon (image + PDF)
+ *     tags: [Sermons]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               date:
+ *                 type: string
+ *                 format: date
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *               pdf:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Sermon uploaded successfully
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Server error
+ */
+
 router.post(
   '/',
   verifyModeratorToken,
@@ -85,9 +124,31 @@ router.post(
 );
 
 /**
- * GET /api/sermons
- * Récupérer tous les sermons
+ * @swagger
+ * /api/sermons:
+ *   get:
+ *     summary: Récupérer tous les sermons
+ *     tags: [Sermons]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: year
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Liste des sermons
+ *       500:
+ *         description: Erreur serveur
  */
+
 router.get('/', async (req, res) => {
   try {
     const db = req.app.locals.db;
@@ -134,9 +195,26 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/sermons/:id
- * Récupérer un sermon spécifique
+ * @swagger
+ * /api/sermons/{id}:
+ *   get:
+ *     summary: Récupérer un sermon spécifique
+ *     tags: [Sermons]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Sermon trouvé
+ *       404:
+ *         description: Sermon non trouvé
+ *       500:
+ *         description: Erreur serveur
  */
+
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -165,9 +243,37 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * PUT /api/sermons/:id
- * Modifier un sermon
+ * @swagger
+ * /api/sermons/{id}:
+ *   put:
+ *     summary: Modifier un sermon
+ *     tags: [Sermons]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Sermon modifié
+ *       404:
+ *         description: Sermon non trouvé
+ *       500:
+ *         description: Erreur serveur
  */
+
 router.put(
   '/:id',
   verifyModeratorToken,
@@ -204,9 +310,28 @@ router.put(
 );
 
 /**
- * DELETE /api/sermons/:id
- * Supprimer un sermon
+ * @swagger
+ * /api/sermons/{id}:
+ *   delete:
+ *     summary: Supprimer un sermon
+ *     tags: [Sermons]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Sermon supprimé
+ *       404:
+ *         description: Sermon non trouvé
+ *       500:
+ *         description: Erreur serveur
  */
+
 router.delete('/:id', verifyModeratorToken, async (req, res) => {
   try {
     const { id } = req.params;

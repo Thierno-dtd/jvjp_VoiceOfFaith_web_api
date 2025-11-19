@@ -1,4 +1,4 @@
-# ✅ BACKEND COMPLET - Tous les fichiers générés
+# ✅ BACKEND COMPLET 
 
 ## 📁 STRUCTURE COMPLÈTE
 
@@ -6,70 +6,37 @@
 backend-api/
 ├── src/
 │   ├── routes/
-│   │   ├── auth.routes.js           ✅
-│   │   ├── user.routes.js           ✅
-│   │   ├── audio.routes.js          ✅
-│   │   ├── sermon.routes.js         ✅
-│   │   ├── event.routes.js          ✅
-│   │   ├── post.routes.js           ✅
-│   │   ├── stats.routes.js          ✅
-│   │   └── live.routes.js           ✅
+│   │   ├── auth.routes.js           
+│   │   ├── user.routes.js           
+│   │   ├── audio.routes.js          
+│   │   ├── sermon.routes.js         
+│   │   ├── event.routes.js          
+│   │   ├── post.routes.js           
+│   │   ├── stats.routes.js          
+│   │   └── live.routes.js           
 │   ├── services/
-│   │   ├── email.service.js         ✅
-│   │   ├── storage.service.js       ✅
-│   │   ├── notification.service.js  ✅
-│   │   └── report.service.js        ✅
+│   │   ├── email.service.js         
+│   │   ├── storage.service.js       
+│   │   ├── notification.service.js  
+│   │   └── report.service.js        
 │   ├── middleware/
-│   │   ├── auth.middleware.js       ✅
-│   │   ├── upload.middleware.js     ✅
-│   │   └── validation.middleware.js ✅
+│   │   ├── auth.middleware.js       
+│   │   ├── upload.middleware.js     
+│   │   └── validation.middleware.js 
 │   ├── utils/
-│   │   ├── response.util.js         ✅
-│   │   └── helpers.js               ✅
-│   ├── index.js                     ✅
-│   └── serviceAccountKey.json       ⬅️ À télécharger
-├── .env                              ⬅️ À créer
-├── .env.example                      ✅
-├── .gitignore                        ✅
-├── package.json                      ✅
-└── README.md                         ✅
+│   │   ├── response.util.js         
+│   │   └── helpers.js               
+│   ├── index.js                     
+│   └── serviceAccountKey.json       
+├── .env                              
+├── .env.example                      
+├── .gitignore                        
+├── package.json                      
+└── README.md                         
 ```
 
 ---
 
-## 📋 FICHIERS GÉNÉRÉS (19 fichiers)
-
-### ✅ Routes API (8 fichiers)
-1. **auth.routes.js** - Reset password, verify token, get me
-2. **user.routes.js** - Invite users, manage users (admin)
-3. **audio.routes.js** - Upload, list, update, delete audios
-4. **sermon.routes.js** - Upload, list sermons (image + PDF)
-5. **event.routes.js** - CRUD events avec daily summaries
-6. **post.routes.js** - CRUD posts (images/vidéos)
-7. **stats.routes.js** - Statistiques globales (admin)
-8. **live.routes.js** - Contrôle du LIVE YouTube
-
-### ✅ Services (4 fichiers)
-9. **email.service.js** - Envoi emails (invitation, bienvenue)
-10. **storage.service.js** - Upload/delete fichiers Firebase Storage
-11. **notification.service.js** - Push notifications FCM
-12. **report.service.js** - Génération rapports mensuels
-
-### ✅ Middleware (3 fichiers)
-13. **auth.middleware.js** - Vérification tokens Firebase
-14. **upload.middleware.js** - Multer config pour uploads
-15. **validation.middleware.js** - Validation inputs
-
-### ✅ Utils (2 fichiers)
-16. **response.util.js** - Réponses API standardisées
-17. **helpers.js** - Fonctions utilitaires (slug, dates, etc.)
-
-### ✅ Configuration (2 + README)
-18. **.env.example** - Template variables d'environnement
-19. **.gitignore** - Fichiers à ignorer
-20. **README.md** - Documentation complète
-
----
 
 ## 🚀 INSTALLATION RAPIDE
 

@@ -4,9 +4,57 @@ const { body, validationResult } = require('express-validator');
 const { verifyFirebaseToken } = require('../middleware/auth.middleware');
 
 /**
- * POST /api/auth/reset-password
- * Reset password avec invitation token
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: Authentification et gestion des utilisateurs
  */
+
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Réinitialiser le mot de passe d'un utilisateur avec un token d'invitation
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - newPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: "abc123token"
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 example: "newStrongPassword123"
+ *     responses:
+ *       200:
+ *         description: Mot de passe réinitialisé avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Password reset successfully"
+ *       400:
+ *         description: Erreur de validation (token manquant ou mot de passe trop court)
+ *       404:
+ *         description: Token invalide ou expiré
+ *       500:
+ *         description: Erreur serveur
+ */
+
 router.post(
   '/reset-password',
   [
@@ -68,9 +116,63 @@ router.post(
 );
 
 /**
- * POST /api/auth/verify-token
- * Vérifier si un token d'invitation est valide
+ * @swagger
+ * /api/auth/verify-token:
+ *   post:
+ *     summary: Vérifier si un token d'invitation est valide
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: "abc123token"
+ *     responses:
+ *       200:
+ *         description: Token valide
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 valid:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     email:
+ *                       type: string
+ *                       example: "user@example.com"
+ *                     displayName:
+ *                       type: string
+ *                       example: "John Doe"
+ *                     role:
+ *                       type: string
+ *                       example: "user"
+ *       404:
+ *         description: Token invalide
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 valid:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: "Invalid token"
+ *       500:
+ *         description: Erreur serveur
  */
+
 router.post('/verify-token', async (req, res) => {
   try {
     const { token } = req.body;
@@ -107,8 +209,41 @@ router.post('/verify-token', async (req, res) => {
 });
 
 /**
- * GET /api/auth/me
- * Récupérer les infos de l'utilisateur connecté
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Récupérer les informations de l'utilisateur connecté
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Infos utilisateur récupérées avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     uid:
+ *                       type: string
+ *                       example: "user123"
+ *                     email:
+ *                       type: string
+ *                       example: "user@example.com"
+ *                     displayName:
+ *                       type: string
+ *                       example: "John Doe"
+ *                     role:
+ *                       type: string
+ *                       example: "user"
+ *       500:
+ *         description: Erreur serveur
  */
 router.get('/me', verifyFirebaseToken, async (req, res) => {
   try {
