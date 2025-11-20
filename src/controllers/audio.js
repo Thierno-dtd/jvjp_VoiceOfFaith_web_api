@@ -1,154 +1,83 @@
-// src/controllers/audio.controller.js
-const AudioService = require('../services/audio');
 const { validationResult } = require('express-validator');
+const { ValidationError } = require('../utils/errors');
+const { asyncHandler } = require('../middleware/errorHandler');
 
 class AudioController {
-  /**
-   * Créer un nouvel audio
-   */
-  async create(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
 
-      if (!req.files || !req.files.audio) {
-        return res.status(400).json({ error: 'Audio file is required' });
-      }
-
-      const result = await AudioService.createAudio(
-        req.body,
-        req.files,
-        req.user
-      );
-
-      res.status(201).json(result);
-    } catch (error) {
-      console.error('Error creating audio:', error);
-      res.status(500).json({
-        error: 'Failed to create audio',
-        message: error.message
-      });
+  create = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Récupérer tous les audios
-   */
-  async getAll(req, res) {
-    try {
-      const { limit = 20, page = 1, category } = req.query;
+    const audioService = req.container.get('audioService');
+    const result = await audioService.createAudio(req.body, req.files, req.user);
 
-      const result = await AudioService.getAllAudios({
-        limit: parseInt(limit),
-        page: parseInt(page),
-        category
-      });
+    res.status(201).json(result);
+  });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching audios:', error);
-      res.status(500).json({ error: 'Failed to fetch audios' });
+  getAll = asyncHandler(async (req, res) => {
+    const { limit = 20, page = 1, category } = req.query;
+
+    const audioService = req.container.get('audioService');
+    const result = await audioService.getAllAudios({
+      limit: parseInt(limit),
+      page: parseInt(page),
+      category
+    });
+
+    res.json(result);
+  });
+
+  getById = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const audioService = req.container.get('audioService');
+    const result = await audioService.getAudioById(id);
+
+    res.json(result);
+  });
+
+  update = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Récupérer un audio par ID
-   */
-  async getById(req, res) {
-    try {
-      const { id } = req.params;
+    const { id } = req.params;
 
-      const result = await AudioService.getAudioById(id);
+    const audioService = req.container.get('audioService');
+    const result = await audioService.updateAudio(id, req.body, req.user);
 
-      if (!result) {
-        return res.status(404).json({ error: 'Audio not found' });
-      }
+    res.json(result);
+  });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching audio:', error);
-      res.status(500).json({ error: 'Failed to fetch audio' });
-    }
-  }
+  delete = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-  /**
-   * Mettre à jour un audio
-   */
-  async update(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+    const audioService = req.container.get('audioService');
+    const result = await audioService.deleteAudio(id, req.user);
 
-      const { id } = req.params;
+    res.json(result);
+  });
 
-      const result = await AudioService.updateAudio(id, req.body, req.user);
+  incrementPlays = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-      if (!result.success) {
-        return res.status(result.status || 400).json({ error: result.error });
-      }
+    const audioService = req.container.get('audioService');
+    const result = await audioService.incrementPlays(id);
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error updating audio:', error);
-      res.status(500).json({ error: 'Failed to update audio' });
-    }
-  }
+    res.json(result);
+  });
 
-  /**
-   * Supprimer un audio
-   */
-  async delete(req, res) {
-    try {
-      const { id } = req.params;
+  incrementDownloads = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-      const result = await AudioService.deleteAudio(id, req.user);
+    const audioService = req.container.get('audioService');
+    const result = await audioService.incrementDownloads(id);
 
-      if (!result.success) {
-        return res.status(result.status || 400).json({ error: result.error });
-      }
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error deleting audio:', error);
-      res.status(500).json({ error: 'Failed to delete audio' });
-    }
-  }
-
-  /**
-   * Incrémenter le compteur de lectures
-   */
-  async incrementPlays(req, res) {
-    try {
-      const { id } = req.params;
-
-      const result = await AudioService.incrementPlays(id);
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error incrementing plays:', error);
-      res.status(500).json({ error: 'Failed to increment plays' });
-    }
-  }
-
-  /**
-   * Incrémenter le compteur de téléchargements
-   */
-  async incrementDownloads(req, res) {
-    try {
-      const { id } = req.params;
-
-      const result = await AudioService.incrementDownloads(id);
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error incrementing downloads:', error);
-      res.status(500).json({ error: 'Failed to increment downloads' });
-    }
-  }
+    res.json(result);
+  });
 }
 
 module.exports = new AudioController();

@@ -1,32 +1,43 @@
-// src/services/audio.service.js
-const admin = require('firebase-admin');
-const { uploadFileToStorage } = require('./storage');
-const { sendNotificationToTopic } = require('./notification');
+const {
+  NotFoundError,
+  AuthorizationError,
+  ValidationError,
+  DatabaseError
+} = require('../utils/errors');
 
 class AudioService {
-  constructor() {
-    this.db = admin.firestore();
+  constructor(dependencies) {
+    this.db = dependencies.db;
+    this.admin = dependencies.admin;
+    this.storageService = null;
+    this.notificationService = null;
   }
 
-  /**
-   * Créer un nouvel audio
-   */
+  setStorageService(storageService) {
+    this.storageService = storageService;
+  }
+
+  setNotificationService(notificationService) {
+    this.notificationService = notificationService;
+  }
+
   async createAudio(data, files, user) {
     try {
       const { title, description, category } = data;
 
-      // Upload audio file
-      const audioFile = files.audio[0];
-      const audioUrl = await uploadFileToStorage(audioFile, 'audios');
-
-      // Upload thumbnail si présent
-      let thumbnailUrl = null;
-      if (files.thumbnail) {
-        const thumbnailFile = files.thumbnail[0];
-        thumbnailUrl = await uploadFileToStorage(thumbnailFile, 'thumbnails');
+      if (!files || !files.audio) {
+        throw new ValidationError('Audio file is required');
       }
 
-      // Créer le document audio
+      const audioFile = files.audio[0];
+      const audioUrl = await this.storageService.uploadFile(audioFile, 'audios');
+
+      let thumbnailUrl = null;
+      if (files.thumbnail && files.thumbnail[0]) {
+        const thumbnailFile = files.thumbnail[0];
+        thumbnailUrl = await this.storageService.uploadFile(thumbnailFile, 'thumbnails');
+      }
+
       const audioData = {
         title,
         description: description || '',
@@ -43,15 +54,16 @@ class AudioService {
 
       const docRef = await this.db.collection('audios').add(audioData);
 
-      // Envoyer notification push
-      await sendNotificationToTopic('all_users', {
-        title: '🎵 Nouvel audio disponible',
-        body: title,
-        data: {
-          type: 'audio',
-          audioId: docRef.id
-        }
-      });
+      if (this.notificationService) {
+        await this.notificationService.sendToTopic('all_users', {
+          title: '🎵 Nouvel audio disponible',
+          body: title,
+          data: {
+            type: 'audio',
+            audioId: docRef.id
+          }
+        });
+      }
 
       return {
         success: true,
@@ -60,13 +72,13 @@ class AudioService {
         audioUrl
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to create audio: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer tous les audios
-   */
   async getAllAudios({ limit, page, category }) {
     try {
       let query = this.db.collection('audios');
@@ -95,23 +107,21 @@ class AudioService {
         audios,
         pagination: {
           page,
-          limit
+          limit,
+          total: snapshot.size
         }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch audios: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer un audio par ID
-   */
   async getAudioById(id) {
     try {
       const doc = await this.db.collection('audios').doc(id).get();
 
       if (!doc.exists) {
-        return null;
+        throw new NotFoundError('Audio');
       }
 
       return {
@@ -123,32 +133,24 @@ class AudioService {
         }
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to fetch audio: ' + error.message);
     }
   }
 
-  /**
-   * Mettre à jour un audio
-   */
   async updateAudio(id, data, user) {
     try {
       const doc = await this.db.collection('audios').doc(id).get();
+      const allowedRoles = ['admin', 'pasteur', 'media']
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Audio not found'
-        };
+        throw new NotFoundError('Audio');
       }
 
-      // Vérifier que l'utilisateur est le créateur ou admin
-      if (doc.data().uploadedBy !== user.uid && user.role !== 'admin') {
-        return {
-          success: false,
-          status: 403,
-          error: 'Forbidden'
-        };
+      if (doc.data().uploadedBy !== user.uid && allowedRoles.includes(user.role)) {
+        throw new AuthorizationError('You do not have permission to update this audio');
       }
 
       const updateData = {};
@@ -163,32 +165,31 @@ class AudioService {
         message: 'Audio updated successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to update audio: ' + error.message);
     }
   }
 
-  /**
-   * Supprimer un audio
-   */
   async deleteAudio(id, user) {
     try {
       const doc = await this.db.collection('audios').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Audio not found'
-        };
+        throw new NotFoundError('Audio');
       }
 
-      // Vérifier que l'utilisateur est le créateur ou admin
       if (doc.data().uploadedBy !== user.uid && user.role !== 'admin') {
-        return {
-          success: false,
-          status: 403,
-          error: 'Forbidden'
-        };
+        throw new AuthorizationError('You do not have permission to delete this audio');
+      }
+
+      const audioData = doc.data();
+      if (audioData.audioUrl && this.storageService) {
+        await this.storageService.deleteFile(audioData.audioUrl);
+      }
+      if (audioData.thumbnailUrl && this.storageService) {
+        await this.storageService.deleteFile(audioData.thumbnailUrl);
       }
 
       await this.db.collection('audios').doc(id).delete();
@@ -198,18 +199,18 @@ class AudioService {
         message: 'Audio deleted successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to delete audio: ' + error.message);
     }
   }
 
-  /**
-   * Incrémenter le compteur de lectures
-   */
   async incrementPlays(id) {
     try {
       const docRef = this.db.collection('audios').doc(id);
       await docRef.update({
-        plays: admin.firestore.FieldValue.increment(1)
+        plays: this.admin.firestore.FieldValue.increment(1)
       });
 
       return {
@@ -217,18 +218,15 @@ class AudioService {
         message: 'Plays incremented'
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to increment plays: ' + error.message);
     }
   }
 
-  /**
-   * Incrémenter le compteur de téléchargements
-   */
   async incrementDownloads(id) {
     try {
       const docRef = this.db.collection('audios').doc(id);
       await docRef.update({
-        downloads: admin.firestore.FieldValue.increment(1)
+        downloads: this.admin.firestore.FieldValue.increment(1)
       });
 
       return {
@@ -236,9 +234,9 @@ class AudioService {
         message: 'Downloads incremented'
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to increment downloads: ' + error.message);
     }
   }
 }
 
-module.exports = new AudioService();
+module.exports = AudioService;

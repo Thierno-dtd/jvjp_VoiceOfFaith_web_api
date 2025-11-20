@@ -1,24 +1,20 @@
 require('dotenv').config();
 const express = require('express');
-const { swaggerSpec, swaggerUi } = require("./swagger");
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const admin = require('firebase-admin');
+const { swaggerSpec, swaggerUi } = require('./swagger');
 
-// Initialize Firebase Admin
-const serviceAccount = require('./serviceAccountKey.json');
+const appConfig = require('./config/app');
+const serviceContainer = require('./config/serviceContainer');
+const {
+  errorHandler,
+  notFoundHandler,
+  handleUncaughtExceptions,
+  handleUnhandledRejections,
+  handleTerminationSignals
+} = require('./middleware/errorHandler');
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET
-});
-
-const db = admin.firestore();
-const auth = admin.auth();
-const storage = admin.storage();
-
-// Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const audioRoutes = require('./routes/audio');
@@ -28,56 +24,84 @@ const postRoutes = require('./routes/post');
 const statsRoutes = require('./routes/stats');
 const liveRoutes = require('./routes/live');
 
-const app = express();
+handleUncaughtExceptions();
 
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+async function startServer() {
+  try {
+    console.log('🚀 Starting Voice Of Faith API Server...\n');
 
-// Middleware
-app.use(helmet());
-app.use(cors());
-app.use(morgan('combined'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+    await serviceContainer.initialize();
 
-// Make Firebase services available to routes
-app.locals.db = db;
-app.locals.auth = auth;
-app.locals.storage = storage;
+    const app = express();
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/admin/users', userRoutes);
-app.use('/api/audios', audioRoutes);
-app.use('/api/sermons', sermonRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/admin/stats', statsRoutes);
-app.use('/api/admin/live', liveRoutes);
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.use(helmet());
+    app.use(cors(appConfig.getCorsConfig()));
+    
+    // Logging
+    if (appConfig.isDevelopment()) {
+      app.use(morgan('dev'));
+    } else {
+      app.use(morgan('combined'));
+    }
+    
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+    app.use((req, res, next) => {
+      req.container = serviceContainer;
+      next();
+    });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    error: 'Internal server error',
-    message: err.message
-  });
-});
+    // Health check
+    app.get('/health', (req, res) => {
+      res.json({
+        success: true,
+        status: 'healthy',
+        environment: appConfig.env,
+        timestamp: new Date().toISOString(),
+        services: {
+          firebase: serviceContainer.has('db'),
+          email: serviceContainer.has('emailTransporter')
+        }
+      });
+    });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
+    app.use('/api/auth', authRoutes);
+    app.use('/api/admin/users', userRoutes);
+    app.use('/api/audios', audioRoutes);
+    app.use('/api/sermons', sermonRoutes);
+    app.use('/api/events', eventRoutes);
+    app.use('/api/posts', postRoutes);
+    app.use('/api/admin/stats', statsRoutes);
+    app.use('/api/admin/live', liveRoutes);
 
-const PORT = process.env.PORT || 3000;
+    // Route 404
+    app.use(notFoundHandler);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🔥 Firebase Admin initialized`);
-});
+    // Error handler global
+    app.use(errorHandler);
 
-module.exports = app;
+    const PORT = appConfig.getPort();
+    const server = app.listen(PORT, () => {
+      console.log(`\n✅ Server running on port ${PORT}`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+      console.log(`🏥 Health check: http://localhost:${PORT}/health\n`);
+    });
+
+    handleUnhandledRejections(server);
+    handleTerminationSignals(server);
+
+    return { app, server };
+
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = startServer;

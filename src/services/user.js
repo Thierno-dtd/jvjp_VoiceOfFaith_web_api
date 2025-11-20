@@ -1,4 +1,3 @@
-// src/services/user.service.js
 const admin = require('firebase-admin');
 const { v4: uuidv4 } = require('uuid');
 const { sendInvitationEmail } = require('./email');
@@ -16,7 +15,6 @@ class UserService {
     try {
       const { email, role, displayName } = data;
 
-      // Vérifier si l'utilisateur existe déjà
       try {
         await this.auth.getUserByEmail(email);
         return {
@@ -31,7 +29,6 @@ class UserService {
       const tempPassword = uuidv4().substring(0, 12);
       const inviteToken = uuidv4();
 
-      // Créer l'utilisateur dans Firebase Auth
       const userRecord = await this.auth.createUser({
         email,
         password: tempPassword,
@@ -39,7 +36,6 @@ class UserService {
         emailVerified: false
       });
 
-      // Créer le document utilisateur dans Firestore
       await this.db.collection('users').doc(userRecord.uid).set({
         email,
         displayName,
@@ -53,7 +49,6 @@ class UserService {
         invitedAt: new Date()
       });
 
-      // Envoyer l'email d'invitation
       await sendInvitationEmail({
         email,
         displayName,
