@@ -1,7 +1,7 @@
 const admin = require('firebase-admin');
 const Event = require('../models/Event');
-const { uploadFileToStorage } = require('./storage.service');
-const { sendNotificationToTopic } = require('./notification.service');
+const { uploadFileToStorage } = require('./storage');
+const { sendNotificationToTopic } = require('./notification');
 
 class EventService {
   constructor() {

@@ -1,7 +1,7 @@
 // src/services/audio.service.js
 const admin = require('firebase-admin');
-const { uploadFileToStorage } = require('./storage.service');
-const { sendNotificationToTopic } = require('./notification.service');
+const { uploadFileToStorage } = require('./storage');
+const { sendNotificationToTopic } = require('./notification');
 
 class AudioService {
   constructor() {

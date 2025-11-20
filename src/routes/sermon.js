@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { verifyModeratorToken } = require('../middleware/auth.middleware');
-const { uploadSermon } = require('../middleware/upload.middleware');
+const { verifyModeratorToken } = require('../middleware/auth');
+const { uploadSermon } = require('../middleware/upload');
 const SermonController = require('../controllers/sermon');
 const sermonValidators = require('../validators/sermon');
 

@@ -19,14 +19,14 @@ const auth = admin.auth();
 const storage = admin.storage();
 
 // Import routes
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const audioRoutes = require('./routes/audio.routes');
-const sermonRoutes = require('./routes/sermon.routes');
-const eventRoutes = require('./routes/event.routes');
-const postRoutes = require('./routes/post.routes');
-const statsRoutes = require('./routes/stats.routes');
-const liveRoutes = require('./routes/live.routes');
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/user');
+const audioRoutes = require('./routes/audio');
+const sermonRoutes = require('./routes/sermon');
+const eventRoutes = require('./routes/event');
+const postRoutes = require('./routes/post');
+const statsRoutes = require('./routes/stats');
+const liveRoutes = require('./routes/live');
 
 const app = express();
 

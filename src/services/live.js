@@ -1,5 +1,5 @@
 const admin = require('firebase-admin');
-const { sendNotificationToTopic } = require('./notification.service');
+const { sendNotificationToTopic } = require('./notification');
 
 class LiveService {
   constructor() {

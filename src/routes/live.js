@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { verifyAdminToken } = require('../middleware/auth.middleware');
+const { verifyAdminToken } = require('../middleware/auth');
 const LiveController = require('../controllers/live');
 const liveValidators = require('../validators/live');
 

@@ -1,7 +1,7 @@
 const admin = require('firebase-admin');
 const Sermon = require('../models/Sermon');
-const { uploadFileToStorage, deleteFileFromStorage } = require('./storage.service');
-const { sendNotificationToTopic } = require('./notification.service');
+const { uploadFileToStorage, deleteFileFromStorage } = require('./storage');
+const { sendNotificationToTopic } = require('./notification');
 
 class SermonService {
   constructor() {

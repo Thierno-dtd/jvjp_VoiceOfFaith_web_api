@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
-const { verifyModeratorToken } = require('../middleware/auth.middleware');
-const { uploadAudio } = require('../middleware/upload.middleware');
+const { verifyModeratorToken } = require('../middleware/auth');
+const { uploadAudio } = require('../middleware/upload');
 const AudioController = require('../controllers/audio');
 
 /**

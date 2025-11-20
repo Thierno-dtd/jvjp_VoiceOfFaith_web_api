@@ -1,7 +1,7 @@
 const admin = require('firebase-admin');
 const Post = require('../models/Post');
-const { uploadFileToStorage } = require('./storage.service');
-const { sendNotificationToTopic } = require('./notification.service');
+const { uploadFileToStorage } = require('./storage');
+const { sendNotificationToTopic } = require('./notification');
 
 class PostService {
   constructor() {

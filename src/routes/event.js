@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { verifyModeratorToken } = require('../middleware/auth.middleware');
-const { uploadSingle } = require('../middleware/upload.middleware');
+const { verifyModeratorToken } = require('../middleware/auth');
+const { uploadSingle } = require('../middleware/upload');
 const EventController = require('../controllers/event');
 const eventValidators = require('../validators/event');
 

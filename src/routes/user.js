@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
-const { verifyAdminToken } = require('../middleware/auth.middleware');
+const { verifyAdminToken } = require('../middleware/auth');
 const UserController = require('../controllers/user');
 
 // Middleware admin

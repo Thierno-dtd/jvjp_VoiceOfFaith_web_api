@@ -1,7 +1,7 @@
 // src/services/user.service.js
 const admin = require('firebase-admin');
 const { v4: uuidv4 } = require('uuid');
-const { sendInvitationEmail } = require('./email.service');
+const { sendInvitationEmail } = require('./email');
 
 class UserService {
   constructor() {

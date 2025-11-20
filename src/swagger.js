@@ -12,7 +12,7 @@ const options = {
     },
     servers: [
       {
-        url: "http://localhost:3000", // modifie selon ton port
+        url: "http://localhost:3000", 
       },
     ],
     components: {
