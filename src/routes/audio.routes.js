@@ -1,12 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
+const { body } = require('express-validator');
 const { verifyModeratorToken } = require('../middleware/auth.middleware');
 const { uploadAudio } = require('../middleware/upload.middleware');
-const AudioController = require('../controllers/audio.controller');
-const { uploadAudio } = require('../middleware/upload.middleware');
-const { uploadFileToStorage } = require('../services/storage.service');
-const { sendNotificationToTopic } = require('../services/notification.service');
+const AudioController = require('../controllers/audio');
 
 /**
  * @swagger

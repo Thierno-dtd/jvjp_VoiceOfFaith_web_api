@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
 const { verifyModeratorToken } = require('../middleware/auth.middleware');
 const { uploadSingle } = require('../middleware/upload.middleware');
-const { uploadFileToStorage } = require('../services/storage.service');
-const { sendNotificationToTopic } = require('../services/notification.service');
+const PostController = require('../controllers/post');
+const postValidators = require('../validators/post');
+
 
 /**
  * @swagger
@@ -50,74 +50,8 @@ router.post(
   '/',
   verifyModeratorToken,
   uploadSingle('media'),
-  [
-    body('type').isIn(['image', 'video']),
-    body('category').isIn(['pensee', 'pasteur', 'media']),
-    body('content').notEmpty().trim()
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({ error: 'Media file is required' });
-      }
-
-      const { type, category, content } = req.body;
-      const db = req.app.locals.db;
-
-      // Upload media file
-      const folderName = type === 'image' ? 'posts/images' : 'posts/videos';
-      const mediaUrl = await uploadFileToStorage(req.file, folderName);
-
-      // Créer le post
-      const postData = {
-        type,
-        category,
-        content,
-        mediaUrl,
-        thumbnailUrl: null, // TODO: Générer thumbnail pour vidéos
-        authorId: req.user.uid,
-        authorName: req.user.displayName,
-        authorRole: req.user.role,
-        createdAt: new Date(),
-        likes: 0,
-        views: 0
-      };
-
-      const docRef = await db.collection('posts').add(postData);
-
-      // Envoyer notification selon catégorie
-      let notifTitle = '📱 Nouvelle publication';
-      if (category === 'pensee') notifTitle = '💭 Nouvelle pensée du jour';
-      if (category === 'pasteur') notifTitle = '✝️ Message du pasteur';
-
-      await sendNotificationToTopic('all_users', {
-        title: notifTitle,
-        body: content.substring(0, 100),
-        data: {
-          type: 'post',
-          postId: docRef.id
-        }
-      });
-
-      res.status(201).json({
-        success: true,
-        message: 'Post created successfully',
-        postId: docRef.id
-      });
-
-    } catch (error) {
-      console.error('Error creating post:', error);
-      res.status(500).json({ 
-        error: 'Failed to create post',
-        message: error.message 
-      });
-    }
-  }
+  postValidators.create,
+  PostController.create
 );
 
 /**
@@ -143,50 +77,11 @@ router.post(
  *       200:
  *         description: Liste des posts
  */
-router.get('/', async (req, res) => {
-  try {
-    const db = req.app.locals.db;
-    const { limit = 20, page = 1, category, authorId } = req.query;
-
-    let query = db.collection('posts');
-
-    if (category) {
-      query = query.where('category', '==', category);
-    }
-
-    if (authorId) {
-      query = query.where('authorId', '==', authorId);
-    }
-
-    const snapshot = await query
-      .orderBy('createdAt', 'desc')
-      .limit(parseInt(limit))
-      .offset((parseInt(page) - 1) * parseInt(limit))
-      .get();
-
-    const posts = [];
-    snapshot.forEach(doc => {
-      posts.push({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate()
-      });
-    });
-
-    res.json({
-      success: true,
-      posts,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit)
-      }
-    });
-
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    res.status(500).json({ error: 'Failed to fetch posts' });
-  }
-});
+router.get(
+  '/',
+  postValidators.getAll,
+  PostController.getAll
+);
 
 /**
  * @swagger
@@ -206,36 +101,11 @@ router.get('/', async (req, res) => {
  *       404:
  *         description: Post non trouvé
  */
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const db = req.app.locals.db;
-
-    const doc = await db.collection('posts').doc(id).get();
-
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'Post not found' });
-    }
-
-    // Incrémenter le compteur de vues
-    await db.collection('posts').doc(id).update({
-      views: (doc.data().views || 0) + 1
-    });
-
-    res.json({
-      success: true,
-      post: {
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate()
-      }
-    });
-
-  } catch (error) {
-    console.error('Error fetching post:', error);
-    res.status(500).json({ error: 'Failed to fetch post' });
-  }
-});
+router.get(
+  '/:id',
+  postValidators.getById,
+  PostController.getById
+);
 
 /**
  * @swagger
@@ -270,41 +140,8 @@ router.get('/:id', async (req, res) => {
 router.put(
   '/:id',
   verifyModeratorToken,
-  [body('content').optional().trim()],
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { content } = req.body;
-      const db = req.app.locals.db;
-
-      const doc = await db.collection('posts').doc(id).get();
-
-      if (!doc.exists) {
-        return res.status(404).json({ error: 'Post not found' });
-      }
-
-      // Vérifier que l'utilisateur est l'auteur ou admin
-      if (doc.data().authorId !== req.user.uid && req.user.role !== 'admin') {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
-
-      const updateData = {
-        updatedAt: new Date()
-      };
-      if (content) updateData.content = content;
-
-      await db.collection('posts').doc(id).update(updateData);
-
-      res.json({
-        success: true,
-        message: 'Post updated successfully'
-      });
-
-    } catch (error) {
-      console.error('Error updating post:', error);
-      res.status(500).json({ error: 'Failed to update post' });
-    }
-  }
+  postValidators.update,
+  PostController.update
 );
 
 /**
@@ -327,34 +164,26 @@ router.put(
  *       404:
  *         description: Post non trouvé
  */
-router.delete('/:id', verifyModeratorToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const db = req.app.locals.db;
+router.delete(
+  '/:id',
+  verifyModeratorToken,
+  postValidators.delete,
+  PostController.delete
+);
 
-    const doc = await db.collection('posts').doc(id).get();
+/**
+ * @swagger
+ * /api/posts/{id}/like:
+ *   post:
+ *     summary: Liker un post
+ *     tags: [Posts]
+ */
+router.post(
+  '/:id/like',
+  postValidators.like,
+  PostController.like
+);
 
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'Post not found' });
-    }
-
-    // Vérifier que l'utilisateur est l'auteur ou admin
-    if (doc.data().authorId !== req.user.uid && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    await db.collection('posts').doc(id).delete();
-
-    res.json({
-      success: true,
-      message: 'Post deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Error deleting post:', error);
-    res.status(500).json({ error: 'Failed to delete post' });
-  }
-});
 
 /**
  * @swagger

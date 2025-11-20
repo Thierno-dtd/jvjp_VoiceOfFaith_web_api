@@ -1,5 +1,5 @@
 // src/controllers/audio.controller.js
-const AudioService = require('../services/audio.service');
+const AudioService = require('../services/audio');
 const { validationResult } = require('express-validator');
 
 class AudioController {

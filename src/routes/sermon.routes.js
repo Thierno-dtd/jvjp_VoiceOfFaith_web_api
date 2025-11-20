@@ -1,12 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
 const { verifyModeratorToken } = require('../middleware/auth.middleware');
 const { uploadSermon } = require('../middleware/upload.middleware');
-const { uploadFileToStorage } = require('../services/storage.service');
-const { sendNotificationToTopic } = require('../services/notification.service');
-const SermonController = require('../controllers/sermon.controller');
-const sermonValidators = require('../validators/sermon.validator');
+const SermonController = require('../controllers/sermon');
+const sermonValidators = require('../validators/sermon');
 
 
 /**

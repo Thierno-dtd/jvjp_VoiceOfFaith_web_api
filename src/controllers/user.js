@@ -1,5 +1,5 @@
 // src/controllers/user.controller.js
-const UserService = require('../services/user.service');
+const UserService = require('../services/user');
 const { validationResult } = require('express-validator');
 
 class UserController {

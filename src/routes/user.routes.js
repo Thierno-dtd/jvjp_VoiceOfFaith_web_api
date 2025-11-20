@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const { v4: uuidv4 } = require('uuid');
-const { sendInvitationEmail } = require('../services/email.service');
+const { body } = require('express-validator');
 const { verifyAdminToken } = require('../middleware/auth.middleware');
+const UserController = require('../controllers/user');
 
 // Middleware admin
 router.use(verifyAdminToken);
