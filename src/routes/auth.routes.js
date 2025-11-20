@@ -12,6 +12,336 @@ const { verifyFirebaseToken } = require('../middleware/auth.middleware');
 
 /**
  * @swagger
+ * /api/auth/login:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Login utilisateur (Firebase Authentication)
+ *     description: Authentifie un utilisateur via Firebase Auth REST API et retourne un idToken + refreshToken.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: user@example.com
+ *               password:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: Login réussi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Login successful
+ *                 token:
+ *                   type: string
+ *                   description: Firebase ID Token
+ *                 refreshToken:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     uid: { type: string }
+ *                     email: { type: string }
+ *                     displayName: { type: string }
+ *                     role: { type: string }
+ *                     photoUrl: { type: string }
+ *       400:
+ *         description: Données invalides
+ *       401:
+ *         description: Identifiants invalides
+ *       500:
+ *         description: Erreur interne
+ */
+router.post(
+  '/login',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('password').notEmpty()
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email, password } = req.body;
+      const auth = req.app.locals.auth;
+      const db = req.app.locals.db;
+
+      // Note: Firebase Admin SDK ne peut pas vérifier le password directement
+      // On doit utiliser Firebase Auth REST API
+      const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+      
+      if (!FIREBASE_API_KEY) {
+        return res.status(500).json({ 
+          error: 'Firebase API key not configured' 
+        });
+      }
+
+      // Appeler l'API REST Firebase Auth
+      const axios = require('axios');
+      const authResponse = await axios.post(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+        {
+          email,
+          password,
+          returnSecureToken: true
+        }
+      );
+
+      const { idToken, refreshToken, localId } = authResponse.data;
+
+      // Récupérer les données utilisateur depuis Firestore
+      const userDoc = await db.collection('users').doc(localId).get();
+
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: 'User not found in database' });
+      }
+
+      const userData = userDoc.data();
+
+      res.json({
+        success: true,
+        message: 'Login successful',
+        token: idToken,
+        refreshToken,
+        user: {
+          uid: localId,
+          email: userData.email,
+          displayName: userData.displayName,
+          role: userData.role,
+          photoUrl: userData.photoUrl
+        }
+      });
+
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      if (error.response?.data?.error) {
+        const errorCode = error.response.data.error.message;
+        
+        if (errorCode === 'EMAIL_NOT_FOUND') {
+          return res.status(401).json({ error: 'Email not found' });
+        }
+        if (errorCode === 'INVALID_PASSWORD') {
+          return res.status(401).json({ error: 'Invalid password' });
+        }
+        if (errorCode === 'USER_DISABLED') {
+          return res.status(401).json({ error: 'User account disabled' });
+        }
+      }
+      
+      res.status(500).json({ 
+        error: 'Login failed',
+        message: error.message 
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Rafraîchir un token Firebase
+ *     description: Retourne un nouveau idToken et refreshToken via Firebase Secure Token API.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: "AEu4IL25xxxxxxx"
+ *     responses:
+ *       200:
+ *         description: Token rafraîchi avec succès
+ *       400:
+ *         description: Token manquant
+ *       401:
+ *         description: Refresh token invalide
+ *       500:
+ *         description: Erreur serveur
+ */
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+    
+    if (!FIREBASE_API_KEY) {
+      return res.status(500).json({ 
+        error: 'Firebase API key not configured' 
+      });
+    }
+
+    // Appeler l'API REST Firebase pour refresh
+    const axios = require('axios');
+    const response = await axios.post(
+      `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
+      {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken
+      }
+    );
+
+    res.json({
+      success: true,
+      token: response.data.id_token,
+      refreshToken: response.data.refresh_token,
+      expiresIn: response.data.expires_in
+    });
+
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(401).json({ 
+      error: 'Token refresh failed',
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Déconnexion utilisateur
+ *     security:
+ *       - bearerAuth: []
+ *     description: Retire le token FCM stocké dans la base pour invalider la session FCM.
+ *     responses:
+ *       200:
+ *         description: Déconnexion réussie
+ *       401:
+ *         description: Token invalide ou absent
+ *       500:
+ *         description: Erreur serveur
+ */
+router.post('/logout', verifyFirebaseToken, async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const userId = req.user.uid;
+
+    // Supprimer le token FCM de l'utilisateur
+    await db.collection('users').doc(userId).update({
+      fcmToken: null,
+      lastLogout: new Date()
+    });
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ 
+      error: 'Logout failed',
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/generate-custom-token:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Générer un custom token (Admin)
+ *     security:
+ *       - bearerAuth: []
+ *     description: Génère un custom token Firebase pour un utilisateur donné (admin uniquement).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - uid
+ *             properties:
+ *               uid:
+ *                 type: string
+ *                 example: "Zdjsq87sHh72Lk"
+ *     responses:
+ *       200:
+ *         description: Custom token généré
+ *       400:
+ *         description: UID manquant
+ *       403:
+ *         description: Accès réservé à l’admin
+ *       500:
+ *         description: Erreur interne
+ */
+router.post(
+  '/generate-custom-token',
+  verifyFirebaseToken,
+  async (req, res) => {
+    try {
+      // Vérifier que l'utilisateur est admin
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { uid } = req.body;
+
+      if (!uid) {
+        return res.status(400).json({ error: 'User UID required' });
+      }
+
+      const auth = req.app.locals.auth;
+
+      // Générer un custom token
+      const customToken = await auth.createCustomToken(uid);
+
+      res.json({
+        success: true,
+        customToken
+      });
+
+    } catch (error) {
+      console.error('Custom token generation error:', error);
+      res.status(500).json({ 
+        error: 'Failed to generate custom token',
+        message: error.message 
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
  * /api/auth/reset-password:
  *   post:
  *     summary: Réinitialiser le mot de passe d'un utilisateur avec un token d'invitation
