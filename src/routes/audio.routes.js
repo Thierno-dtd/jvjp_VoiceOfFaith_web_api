@@ -3,6 +3,8 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { verifyModeratorToken } = require('../middleware/auth.middleware');
 const { uploadAudio } = require('../middleware/upload.middleware');
+const AudioController = require('../controllers/audio.controller');
+const { uploadAudio } = require('../middleware/upload.middleware');
 const { uploadFileToStorage } = require('../services/storage.service');
 const { sendNotificationToTopic } = require('../services/notification.service');
 
@@ -85,73 +87,7 @@ router.post(
     body('description').optional().trim(),
     body('category').isIn(['emission', 'podcast', 'teaching'])
   ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      if (!req.files || !req.files.audio) {
-        return res.status(400).json({ error: 'Audio file is required' });
-      }
-
-      const { title, description, category } = req.body;
-      const db = req.app.locals.db;
-      
-      // Upload audio file
-      const audioFile = req.files.audio[0];
-      const audioUrl = await uploadFileToStorage(audioFile, 'audios');
-
-      // Upload thumbnail si présent
-      let thumbnailUrl = null;
-      if (req.files.thumbnail) {
-        const thumbnailFile = req.files.thumbnail[0];
-        thumbnailUrl = await uploadFileToStorage(thumbnailFile, 'thumbnails');
-      }
-
-      // Créer le document audio
-      const audioData = {
-        title,
-        description: description || '',
-        audioUrl,
-        thumbnailUrl,
-        duration: 0, // À calculer côté client ou via traitement
-        uploadedBy: req.user.uid,
-        uploadedByName: req.user.displayName,
-        category,
-        createdAt: new Date(),
-        downloads: 0,
-        plays: 0
-      };
-
-      const docRef = await db.collection('audios').add(audioData);
-
-      // Envoyer notification push
-      await sendNotificationToTopic('all_users', {
-        title: '🎵 Nouvel audio disponible',
-        body: title,
-        data: {
-          type: 'audio',
-          audioId: docRef.id
-        }
-      });
-
-      res.status(201).json({
-        success: true,
-        message: 'Audio uploaded successfully',
-        audioId: docRef.id,
-        audioUrl
-      });
-
-    } catch (error) {
-      console.error('Error uploading audio:', error);
-      res.status(500).json({ 
-        error: 'Failed to upload audio',
-        message: error.message 
-      });
-    }
-  }
+  AudioController.create
 );
 
 /**
@@ -206,46 +142,7 @@ router.post(
  *       500:
  *         description: Erreur serveur
  */
-router.get('/', async (req, res) => {
-  try {
-    const db = req.app.locals.db;
-    const { limit = 20, page = 1, category } = req.query;
-
-    let query = db.collection('audios');
-
-    if (category) {
-      query = query.where('category', '==', category);
-    }
-
-    const snapshot = await query
-      .orderBy('createdAt', 'desc')
-      .limit(parseInt(limit))
-      .offset((parseInt(page) - 1) * parseInt(limit))
-      .get();
-
-    const audios = [];
-    snapshot.forEach(doc => {
-      audios.push({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate()
-      });
-    });
-
-    res.json({
-      success: true,
-      audios,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit)
-      }
-    });
-
-  } catch (error) {
-    console.error('Error fetching audios:', error);
-    res.status(500).json({ error: 'Failed to fetch audios' });
-  }
-});
+router.get('/', AudioController.getAll);
 
 /**
  * @swagger
@@ -278,31 +175,7 @@ router.get('/', async (req, res) => {
  *       500:
  *         description: Erreur serveur
  */
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const db = req.app.locals.db;
-
-    const doc = await db.collection('audios').doc(id).get();
-
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'Audio not found' });
-    }
-
-    res.json({
-      success: true,
-      audio: {
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate()
-      }
-    });
-
-  } catch (error) {
-    console.error('Error fetching audio:', error);
-    res.status(500).json({ error: 'Failed to fetch audio' });
-  }
-});
+router.get('/:id', AudioController.getById);
 
 /**
  * @swagger
@@ -360,44 +233,7 @@ router.put(
     body('title').optional().trim(),
     body('description').optional().trim()
   ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const { id } = req.params;
-      const db = req.app.locals.db;
-
-      const doc = await db.collection('audios').doc(id).get();
-
-      if (!doc.exists) {
-        return res.status(404).json({ error: 'Audio not found' });
-      }
-
-      // Vérifier que l'utilisateur est le créateur ou admin
-      if (doc.data().uploadedBy !== req.user.uid && req.user.role !== 'admin') {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
-
-      const updateData = {};
-      if (req.body.title) updateData.title = req.body.title;
-      if (req.body.description) updateData.description = req.body.description;
-      updateData.updatedAt = new Date();
-
-      await db.collection('audios').doc(id).update(updateData);
-
-      res.json({
-        success: true,
-        message: 'Audio updated successfully'
-      });
-
-    } catch (error) {
-      console.error('Error updating audio:', error);
-      res.status(500).json({ error: 'Failed to update audio' });
-    }
-  }
+  AudioController.update
 );
 
 /**
@@ -436,34 +272,24 @@ router.put(
  *       500:
  *         description: Erreur serveur
  */
-router.delete('/:id', verifyModeratorToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const db = req.app.locals.db;
+router.delete('/:id', verifyModeratorToken, AudioController.delete);
 
-    const doc = await db.collection('audios').doc(id).get();
+/**
+ * @swagger
+ * /api/audios/{id}/play:
+ *   post:
+ *     summary: Incrémenter le compteur de lectures
+ *     tags: [Audios]
+ */
+router.post('/:id/play', AudioController.incrementPlays);
 
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'Audio not found' });
-    }
-
-    // Vérifier que l'utilisateur est le créateur ou admin
-    if (doc.data().uploadedBy !== req.user.uid && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    // TODO: Supprimer aussi les fichiers du Storage
-    await db.collection('audios').doc(id).delete();
-
-    res.json({
-      success: true,
-      message: 'Audio deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Error deleting audio:', error);
-    res.status(500).json({ error: 'Failed to delete audio' });
-  }
-});
+/**
+ * @swagger
+ * /api/audios/{id}/download:
+ *   post:
+ *     summary: Incrémenter le compteur de téléchargements
+ *     tags: [Audios]
+ */
+router.post('/:id/download', AudioController.incrementDownloads);
 
 module.exports = router;
