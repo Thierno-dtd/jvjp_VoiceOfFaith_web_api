@@ -1,14 +1,15 @@
-const admin = require('firebase-admin');
-const { sendNotificationToTopic } = require('./notification');
+const { DatabaseError } = require('../utils/errors');
 
 class LiveService {
-  constructor() {
-    this.db = admin.firestore();
+  constructor(dependencies) {
+    this.db = dependencies.db;
+    this.notificationService = null;
   }
 
-  /**
-   * Récupérer le statut du LIVE
-   */
+  setNotificationService(notificationService) {
+    this.notificationService = notificationService;
+  }
+
   async getLiveStatus() {
     try {
       const doc = await this.db.collection('settings').doc('app_settings').get();
@@ -34,13 +35,10 @@ class LiveService {
         }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch live status: ' + error.message);
     }
   }
 
-  /**
-   * Mettre à jour le statut du LIVE
-   */
   async updateLiveStatus(data, user) {
     try {
       const { isLive, liveYoutubeUrl, liveTitle } = data;
@@ -58,7 +56,6 @@ class LiveService {
         updateData.liveTitle = liveTitle;
       }
 
-      // Vérifier si le document existe
       const doc = await this.db.collection('settings').doc('app_settings').get();
 
       if (!doc.exists) {
@@ -70,9 +67,8 @@ class LiveService {
         await this.db.collection('settings').doc('app_settings').update(updateData);
       }
 
-      // Envoyer notification si le LIVE démarre
-      if (isLive) {
-        await sendNotificationToTopic('all_users', {
+      if (isLive && this.notificationService) {
+        await this.notificationService.sendToTopic('all_users', {
           title: '🔴 LIVE EN DIRECT !',
           body: liveTitle || 'Rejoignez-nous maintenant',
           data: {
@@ -88,38 +84,36 @@ class LiveService {
         live: updateData
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to update live status: ' + error.message);
     }
   }
 
-  /**
-   * Envoyer une notification manuelle
-   */
   async sendLiveNotification(data) {
     try {
       const { title, body } = data;
 
-      // Récupérer l'URL du live
       const doc = await this.db.collection('settings').doc('app_settings').get();
       const liveUrl = doc.exists ? doc.data().liveYoutubeUrl : '';
 
-      await sendNotificationToTopic('all_users', {
-        title,
-        body,
-        data: {
-          type: 'live',
-          url: liveUrl || ''
-        }
-      });
+      if (this.notificationService) {
+        await this.notificationService.sendToTopic('all_users', {
+          title,
+          body,
+          data: {
+            type: 'live',
+            url: liveUrl || ''
+          }
+        });
+      }
 
       return {
         success: true,
         message: 'Notification sent successfully'
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to send notification: ' + error.message);
     }
   }
 }
 
-module.exports = new LiveService();
+module.exports = LiveService;

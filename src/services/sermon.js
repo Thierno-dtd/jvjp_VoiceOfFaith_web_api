@@ -1,52 +1,62 @@
-const admin = require('firebase-admin');
-const Sermon = require('../models/Sermon');
-const { uploadFileToStorage, deleteFileFromStorage } = require('./storage');
-const { sendNotificationToTopic } = require('./notification');
+const {
+  NotFoundError,
+  AuthorizationError,
+  ValidationError,
+  DatabaseError
+} = require('../utils/errors');
 
 class SermonService {
-  constructor() {
-    this.db = admin.firestore();
+  constructor(dependencies) {
+    this.db = dependencies.db;
+    this.admin = dependencies.admin;
+    this.storageService = null;
+    this.notificationService = null;
   }
 
-  /**
-   * Créer un nouveau sermon
-   */
+  setStorageService(storageService) {
+    this.storageService = storageService;
+  }
+
+  setNotificationService(notificationService) {
+    this.notificationService = notificationService;
+  }
+
   async createSermon(data, files, user) {
     try {
       if (!files || !files.image || !files.pdf) {
-        throw new Error('Image and PDF files are required');
+        throw new ValidationError('Image and PDF files are required');
       }
 
       const { title, date } = data;
 
-      // Upload image
       const imageFile = files.image[0];
-      const imageUrl = await uploadFileToStorage(imageFile, 'sermons/images');
+      const imageUrl = await this.storageService.uploadFile(imageFile, 'sermons/images');
 
-      // Upload PDF
       const pdfFile = files.pdf[0];
-      const pdfUrl = await uploadFileToStorage(pdfFile, 'sermons/pdfs');
+      const pdfUrl = await this.storageService.uploadFile(pdfFile, 'sermons/pdfs');
 
-      // Créer le document sermon
-      const sermonData = Sermon.create({
+      const sermonData = {
         title,
         date: new Date(date),
         imageUrl,
         pdfUrl,
-        uploadedBy: user.uid
-      });
+        uploadedBy: user.uid,
+        downloads: 0,
+        createdAt: new Date()
+      };
 
-      const docRef = await this.db.collection(Sermon.collection).add(sermonData);
+      const docRef = await this.db.collection('sermons').add(sermonData);
 
-      // Envoyer notification
-      await sendNotificationToTopic('all_users', {
-        title: '📖 Nouveau sermon disponible',
-        body: title,
-        data: {
-          type: 'sermon',
-          sermonId: docRef.id
-        }
-      });
+      if (this.notificationService) {
+        await this.notificationService.sendToTopic('all_users', {
+          title: '📖 Nouveau sermon disponible',
+          body: title,
+          data: {
+            type: 'sermon',
+            sermonId: docRef.id
+          }
+        });
+      }
 
       return {
         success: true,
@@ -56,18 +66,17 @@ class SermonService {
         pdfUrl
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to create sermon: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer tous les sermons
-   */
   async getAllSermons({ limit, page, year, month }) {
     try {
-      let query = this.db.collection(Sermon.collection);
+      let query = this.db.collection('sermons');
 
-      // Filtrer par année/mois si fourni
       if (year) {
         const startDate = new Date(year, month ? month - 1 : 0, 1);
         const endDate = month 
@@ -99,29 +108,19 @@ class SermonService {
       return {
         success: true,
         sermons,
-        pagination: {
-          page,
-          limit
-        }
+        pagination: { page, limit }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch sermons: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer un sermon par ID
-   */
   async getSermonById(id) {
     try {
-      const doc = await this.db.collection(Sermon.collection).doc(id).get();
+      const doc = await this.db.collection('sermons').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Sermon not found'
-        };
+        throw new NotFoundError('Sermon');
       }
 
       const data = doc.data();
@@ -135,107 +134,82 @@ class SermonService {
         }
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to fetch sermon: ' + error.message);
     }
   }
 
-  /**
-   * Mettre à jour un sermon
-   */
   async updateSermon(id, data, user) {
     try {
-      const doc = await this.db.collection(Sermon.collection).doc(id).get();
+      const doc = await this.db.collection('sermons').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Sermon not found'
-        };
+        throw new NotFoundError('Sermon');
       }
 
-      // Vérifier les permissions (créateur ou admin)
       if (doc.data().uploadedBy !== user.uid && user.role !== 'admin') {
-        return {
-          success: false,
-          status: 403,
-          error: 'Forbidden'
-        };
+        throw new AuthorizationError('You do not have permission to update this sermon');
       }
 
-      const updateData = Sermon.update({});
+      const updateData = { updatedAt: new Date() };
       if (data.title) updateData.title = data.title;
       if (data.date) updateData.date = new Date(data.date);
 
-      await this.db.collection(Sermon.collection).doc(id).update(updateData);
+      await this.db.collection('sermons').doc(id).update(updateData);
 
       return {
         success: true,
         message: 'Sermon updated successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to update sermon: ' + error.message);
     }
   }
 
-  /**
-   * Supprimer un sermon
-   */
   async deleteSermon(id, user) {
     try {
-      const doc = await this.db.collection(Sermon.collection).doc(id).get();
+      const doc = await this.db.collection('sermons').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Sermon not found'
-        };
+        throw new NotFoundError('Sermon');
       }
 
-      // Vérifier les permissions
       if (doc.data().uploadedBy !== user.uid && user.role !== 'admin') {
-        return {
-          success: false,
-          status: 403,
-          error: 'Forbidden'
-        };
+        throw new AuthorizationError('You do not have permission to delete this sermon');
       }
 
       const sermonData = doc.data();
 
-      // Supprimer les fichiers du Storage
-      try {
-        if (sermonData.imageUrl) {
-          await deleteFileFromStorage(sermonData.imageUrl);
-        }
-        if (sermonData.pdfUrl) {
-          await deleteFileFromStorage(sermonData.pdfUrl);
-        }
-      } catch (storageError) {
-        console.warn('Error deleting files from storage:', storageError);
+      if (sermonData.imageUrl && this.storageService) {
+        await this.storageService.deleteFile(sermonData.imageUrl);
+      }
+      if (sermonData.pdfUrl && this.storageService) {
+        await this.storageService.deleteFile(sermonData.pdfUrl);
       }
 
-      // Supprimer le document
-      await this.db.collection(Sermon.collection).doc(id).delete();
+      await this.db.collection('sermons').doc(id).delete();
 
       return {
         success: true,
         message: 'Sermon deleted successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to delete sermon: ' + error.message);
     }
   }
 
-  /**
-   * Incrémenter le compteur de téléchargements
-   */
   async incrementDownloads(id) {
     try {
-      const docRef = this.db.collection(Sermon.collection).doc(id);
-      await docRef.update({
-        downloads: admin.firestore.FieldValue.increment(1)
+      await this.db.collection('sermons').doc(id).update({
+        downloads: this.admin.firestore.FieldValue.increment(1)
       });
 
       return {
@@ -243,16 +217,13 @@ class SermonService {
         message: 'Downloads incremented'
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to increment downloads: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer les statistiques des sermons
-   */
   async getSermonStats({ year }) {
     try {
-      let query = this.db.collection(Sermon.collection);
+      let query = this.db.collection('sermons');
 
       if (year) {
         const startDate = new Date(year, 0, 1);
@@ -284,9 +255,9 @@ class SermonService {
         }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch sermon stats: ' + error.message);
     }
   }
 }
 
-module.exports = new SermonService();
+module.exports = SermonService;

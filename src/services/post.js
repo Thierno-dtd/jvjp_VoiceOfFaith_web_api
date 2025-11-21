@@ -1,51 +1,67 @@
-const admin = require('firebase-admin');
-const Post = require('../models/Post');
-const { uploadFileToStorage } = require('./storage');
-const { sendNotificationToTopic } = require('./notification');
+const {
+  NotFoundError,
+  AuthorizationError,
+  ValidationError,
+  DatabaseError
+} = require('../utils/errors');
 
 class PostService {
-  constructor() {
-    this.db = admin.firestore();
+  constructor(dependencies) {
+    this.db = dependencies.db;
+    this.admin = dependencies.admin;
+    this.storageService = null;
+    this.notificationService = null;
   }
 
-  /**
-   * Créer un nouveau post
-   */
+  setStorageService(storageService) {
+    this.storageService = storageService;
+  }
+
+  setNotificationService(notificationService) {
+    this.notificationService = notificationService;
+  }
+
   async createPost(data, file, user) {
     try {
       const { type, category, content } = data;
 
-      // Upload media file
-      const folderName = type === 'image' ? 'posts/images' : 'posts/videos';
-      const mediaUrl = await uploadFileToStorage(file, folderName);
+      if (!file) {
+        throw new ValidationError('Media file is required');
+      }
 
-      // Créer le post
-      const postData = Post.create({
+      const folderName = type === 'image' ? 'posts/images' : 'posts/videos';
+      const mediaUrl = await this.storageService.uploadFile(file, folderName);
+
+      const postData = {
         type,
         category,
         content,
         mediaUrl,
-        thumbnailUrl: null, // TODO: Générer thumbnail pour vidéos
+        thumbnailUrl: null,
         authorId: user.uid,
         authorName: user.displayName,
-        authorRole: user.role
-      });
+        authorRole: user.role,
+        likes: 0,
+        views: 0,
+        createdAt: new Date()
+      };
 
-      const docRef = await this.db.collection(Post.collection).add(postData);
+      const docRef = await this.db.collection('posts').add(postData);
 
-      // Envoyer notification selon catégorie
-      let notifTitle = '📱 Nouvelle publication';
-      if (category === 'pensee') notifTitle = '💭 Nouvelle pensée du jour';
-      if (category === 'pasteur') notifTitle = '✝️ Message du pasteur';
+      if (this.notificationService) {
+        let notifTitle = '📱 Nouvelle publication';
+        if (category === 'pensee') notifTitle = '💭 Nouvelle pensée du jour';
+        if (category === 'pasteur') notifTitle = '✝️ Message du pasteur';
 
-      await sendNotificationToTopic('all_users', {
-        title: notifTitle,
-        body: content.substring(0, 100),
-        data: {
-          type: 'post',
-          postId: docRef.id
-        }
-      });
+        await this.notificationService.sendToTopic('all_users', {
+          title: notifTitle,
+          body: content.substring(0, 100),
+          data: {
+            type: 'post',
+            postId: docRef.id
+          }
+        });
+      }
 
       return {
         success: true,
@@ -53,16 +69,16 @@ class PostService {
         postId: docRef.id
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to create post: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer tous les posts
-   */
   async getAllPosts({ limit, page, category, authorId }) {
     try {
-      let query = this.db.collection(Post.collection);
+      let query = this.db.collection('posts');
 
       if (category) {
         query = query.where('category', '==', category);
@@ -90,34 +106,23 @@ class PostService {
       return {
         success: true,
         posts,
-        pagination: {
-          page,
-          limit
-        }
+        pagination: { page, limit }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch posts: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer un post par ID
-   */
   async getPostById(id) {
     try {
-      const doc = await this.db.collection(Post.collection).doc(id).get();
+      const doc = await this.db.collection('posts').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Post not found'
-        };
+        throw new NotFoundError('Post');
       }
 
-      // Incrémenter le compteur de vues
-      await this.db.collection(Post.collection).doc(id).update({
-        views: admin.firestore.FieldValue.increment(1)
+      await this.db.collection('posts').doc(id).update({
+        views: this.admin.firestore.FieldValue.increment(1)
       });
 
       return {
@@ -129,90 +134,72 @@ class PostService {
         }
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to fetch post: ' + error.message);
     }
   }
 
-  /**
-   * Mettre à jour un post
-   */
   async updatePost(id, data, user) {
     try {
-      const doc = await this.db.collection(Post.collection).doc(id).get();
+      const doc = await this.db.collection('posts').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Post not found'
-        };
+        throw new NotFoundError('Post');
       }
 
-      // Vérifier que l'utilisateur est l'auteur ou admin
       if (doc.data().authorId !== user.uid && user.role !== 'admin') {
-        return {
-          success: false,
-          status: 403,
-          error: 'Forbidden'
-        };
+        throw new AuthorizationError('You do not have permission to update this post');
       }
 
-      const updateData = Post.update({});
+      const updateData = { updatedAt: new Date() };
       if (data.content) updateData.content = data.content;
 
-      await this.db.collection(Post.collection).doc(id).update(updateData);
+      await this.db.collection('posts').doc(id).update(updateData);
 
       return {
         success: true,
         message: 'Post updated successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to update post: ' + error.message);
     }
   }
 
-  /**
-   * Supprimer un post
-   */
   async deletePost(id, user) {
     try {
-      const doc = await this.db.collection(Post.collection).doc(id).get();
+      const doc = await this.db.collection('posts').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Post not found'
-        };
+        throw new NotFoundError('Post');
       }
 
-      // Vérifier que l'utilisateur est l'auteur ou admin
       if (doc.data().authorId !== user.uid && user.role !== 'admin') {
-        return {
-          success: false,
-          status: 403,
-          error: 'Forbidden'
-        };
+        throw new AuthorizationError('You do not have permission to delete this post');
       }
 
-      await this.db.collection(Post.collection).doc(id).delete();
+      await this.db.collection('posts').doc(id).delete();
 
       return {
         success: true,
         message: 'Post deleted successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to delete post: ' + error.message);
     }
   }
 
-  /**
-   * Liker un post
-   */
   async likePost(id) {
     try {
-      await this.db.collection(Post.collection).doc(id).update({
-        likes: admin.firestore.FieldValue.increment(1)
+      await this.db.collection('posts').doc(id).update({
+        likes: this.admin.firestore.FieldValue.increment(1)
       });
 
       return {
@@ -220,9 +207,9 @@ class PostService {
         message: 'Post liked successfully'
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to like post: ' + error.message);
     }
   }
 }
 
-module.exports = new PostService();
+module.exports = PostService;

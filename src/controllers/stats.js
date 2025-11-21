@@ -1,60 +1,38 @@
-const StatsService = require('../services/stats');
+const { validationResult } = require('express-validator');
+const { ValidationError } = require('../utils/errors');
+const { asyncHandler } = require('../middleware/errorHandler');
 
 class StatsController {
-  /**
-   * Statistiques globales
-   */
-  async getOverview(req, res) {
-    try {
-      const result = await StatsService.getOverviewStats();
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching overview stats:', error);
-      res.status(500).json({ error: 'Failed to fetch stats' });
-    }
-  }
+  getOverview = asyncHandler(async (req, res) => {
+    const statsService = req.container.get('statsService');
+    const result = await statsService.getOverviewStats();
 
-  /**
-   * Statistiques des audios
-   */
-  async getAudioStats(req, res) {
-    try {
-      const { period = '30' } = req.query;
+    res.json(result);
+  });
 
-      const result = await StatsService.getAudioStats(parseInt(period));
+  getAudioStats = asyncHandler(async (req, res) => {
+    const { period = '30' } = req.query;
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching audio stats:', error);
-      res.status(500).json({ error: 'Failed to fetch audio stats' });
-    }
-  }
+    const statsService = req.container.get('statsService');
+    const result = await statsService.getAudioStats(parseInt(period));
 
-  /**
-   * Statistiques des utilisateurs
-   */
-  async getUserStats(req, res) {
-    try {
-      const result = await StatsService.getUserStats();
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching user stats:', error);
-      res.status(500).json({ error: 'Failed to fetch user stats' });
-    }
-  }
+    res.json(result);
+  });
 
-  /**
-   * Statistiques d'engagement
-   */
-  async getEngagementStats(req, res) {
-    try {
-      const result = await StatsService.getEngagementStats();
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching engagement stats:', error);
-      res.status(500).json({ error: 'Failed to fetch engagement stats' });
-    }
-  }
+  getUserStats = asyncHandler(async (req, res) => {
+    const statsService = req.container.get('statsService');
+    const result = await statsService.getUserStats();
+
+    res.json(result);
+  });
+
+  getEngagementStats = asyncHandler(async (req, res) => {
+    const statsService = req.container.get('statsService');
+    const result = await statsService.getEngagementStats();
+
+    res.json(result);
+  });
 }
+
 
 module.exports = new StatsController();

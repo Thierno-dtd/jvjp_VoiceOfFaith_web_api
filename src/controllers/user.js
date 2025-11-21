@@ -1,130 +1,74 @@
-const UserService = require('../services/user');
 const { validationResult } = require('express-validator');
+const { ValidationError } = require('../utils/errors');
+const { asyncHandler } = require('../middleware/errorHandler');
 
 class UserController {
-  /**
-   * Inviter un utilisateur
-   */
-  async invite(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const result = await UserService.inviteUser(req.body, req.user);
-
-      if (!result.success) {
-        return res.status(result.status || 400).json({ error: result.error });
-      }
-
-      res.status(201).json(result);
-    } catch (error) {
-      console.error('Error inviting user:', error);
-      res.status(500).json({
-        error: 'Failed to invite user',
-        message: error.message
-      });
+  invite = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Récupérer tous les utilisateurs
-   */
-  async getAll(req, res) {
-    try {
-      const { role, limit = 50, page = 1 } = req.query;
+    const userService = req.container.get('userService');
+    const result = await userService.inviteUser(req.body, req.user);
 
-      const result = await UserService.getAllUsers({
-        role,
-        limit: parseInt(limit),
-        page: parseInt(page)
-      });
+    res.status(201).json(result);
+  });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      res.status(500).json({ error: 'Failed to fetch users' });
+  getAll = asyncHandler(async (req, res) => {
+    const { role, limit = 50, page = 1 } = req.query;
+
+    const userService = req.container.get('userService');
+    const result = await userService.getAllUsers({
+      role,
+      limit: parseInt(limit),
+      page: parseInt(page)
+    });
+
+    res.json(result);
+  });
+
+  getById = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const userService = req.container.get('userService');
+    const result = await userService.getUserById(id);
+
+    res.json(result);
+  });
+
+  updateRole = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Mettre à jour le rôle d'un utilisateur
-   */
-  async updateRole(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+    const { id } = req.params;
+    const { role } = req.body;
 
-      const { id } = req.params;
-      const { role } = req.body;
+    const userService = req.container.get('userService');
+    const result = await userService.updateUserRole(id, role);
 
-      const result = await UserService.updateUserRole(id, role);
+    res.json(result);
+  });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error updating user role:', error);
-      res.status(500).json({ error: 'Failed to update user role' });
-    }
-  }
+  resendInvitation = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-  /**
-   * Renvoyer l'invitation
-   */
-  async resendInvitation(req, res) {
-    try {
-      const { id } = req.params;
+    const userService = req.container.get('userService');
+    const result = await userService.resendInvitation(id);
 
-      const result = await UserService.resendInvitation(id);
+    res.json(result);
+  });
 
-      if (!result.success) {
-        return res.status(result.status || 400).json({ error: result.error });
-      }
+  delete = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error resending invitation:', error);
-      res.status(500).json({ error: 'Failed to resend invitation' });
-    }
-  }
+    const userService = req.container.get('userService');
+    const result = await userService.deleteUser(id);
 
-  /**
-   * Supprimer un utilisateur
-   */
-  async delete(req, res) {
-    try {
-      const { id } = req.params;
-
-      const result = await UserService.deleteUser(id);
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      res.status(500).json({ error: 'Failed to delete user' });
-    }
-  }
-
-  /**
-   * Récupérer un utilisateur par ID
-   */
-  async getById(req, res) {
-    try {
-      const { id } = req.params;
-
-      const result = await UserService.getUserById(id);
-
-      if (!result.success) {
-        return res.status(result.status || 404).json({ error: result.error });
-      }
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching user:', error);
-      res.status(500).json({ error: 'Failed to fetch user' });
-    }
-  }
+    res.json(result);
+  });
 }
 
 module.exports = new UserController();

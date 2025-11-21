@@ -1,16 +1,10 @@
-const admin = require('firebase-admin');
-
 class StatsService {
-  constructor() {
-    this.db = admin.firestore();
+  constructor(dependencies) {
+    this.db = dependencies.db;
   }
 
-  /**
-   * Statistiques globales
-   */
   async getOverviewStats() {
     try {
-      // Compter les utilisateurs par rôle
       const usersSnapshot = await this.db.collection('users').get();
       const usersByRole = {
         user: 0,
@@ -27,13 +21,11 @@ class StatsService {
         }
       });
 
-      // Compter les contenus
       const audiosCount = (await this.db.collection('audios').count().get()).data().count;
       const sermonsCount = (await this.db.collection('sermons').count().get()).data().count;
       const eventsCount = (await this.db.collection('events').count().get()).data().count;
       const postsCount = (await this.db.collection('posts').count().get()).data().count;
 
-      // Calculer totaux plays/downloads
       const audiosSnapshot = await this.db.collection('audios').get();
       let totalPlays = 0;
       let totalDownloads = 0;
@@ -42,7 +34,6 @@ class StatsService {
         totalDownloads += doc.data().downloads || 0;
       });
 
-      // Statistiques des 30 derniers jours
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -78,13 +69,10 @@ class StatsService {
         }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch overview stats: ' + error.message);
     }
   }
 
-  /**
-   * Statistiques des audios
-   */
   async getAudioStats(period) {
     try {
       const periodDate = new Date();
@@ -121,7 +109,6 @@ class StatsService {
         });
       });
 
-      // Top 10 audios par lectures
       stats.topAudios = audios
         .sort((a, b) => b.plays - a.plays)
         .slice(0, 10);
@@ -132,13 +119,10 @@ class StatsService {
         stats
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch audio stats: ' + error.message);
     }
   }
 
-  /**
-   * Statistiques des utilisateurs
-   */
   async getUserStats() {
     try {
       const snapshot = await this.db.collection('users').get();
@@ -157,12 +141,10 @@ class StatsService {
       snapshot.forEach(doc => {
         const data = doc.data();
         
-        // Compter par rôle
         if (stats.byRole[data.role] !== undefined) {
           stats.byRole[data.role]++;
         }
 
-        // Compter par mois
         const date = data.createdAt.toDate();
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         stats.registrationsByMonth[monthKey] = (stats.registrationsByMonth[monthKey] || 0) + 1;
@@ -173,16 +155,12 @@ class StatsService {
         stats
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch user stats: ' + error.message);
     }
   }
 
-  /**
-   * Statistiques d'engagement
-   */
   async getEngagementStats() {
     try {
-      // Posts stats
       const postsSnapshot = await this.db.collection('posts').get();
       let totalPostViews = 0;
       let totalPostLikes = 0;
@@ -193,7 +171,6 @@ class StatsService {
         totalPostLikes += data.likes || 0;
       });
 
-      // Sermons stats
       const sermonsSnapshot = await this.db.collection('sermons').get();
       let totalSermonDownloads = 0;
 
@@ -222,9 +199,9 @@ class StatsService {
         }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch engagement stats: ' + error.message);
     }
   }
 }
 
-module.exports = new StatsService();
+module.exports = StatsService;

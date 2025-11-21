@@ -1,29 +1,32 @@
-const admin = require('firebase-admin');
 const { v4: uuidv4 } = require('uuid');
-const { sendInvitationEmail } = require('./email');
+const {
+  NotFoundError,
+  ConflictError,
+  DatabaseError
+} = require('../utils/errors');
 
 class UserService {
-  constructor() {
-    this.auth = admin.auth();
-    this.db = admin.firestore();
+  constructor(dependencies) {
+    this.auth = dependencies.auth;
+    this.db = dependencies.db;
+    this.emailService = null;
   }
 
-  /**
-   * Inviter un utilisateur
-   */
+  setEmailService(emailService) {
+    this.emailService = emailService;
+  }
+
   async inviteUser(data, invitedBy) {
     try {
       const { email, role, displayName } = data;
 
       try {
         await this.auth.getUserByEmail(email);
-        return {
-          success: false,
-          status: 400,
-          error: 'User with this email already exists'
-        };
+        throw new ConflictError('User with this email already exists');
       } catch (error) {
-        // L'utilisateur n'existe pas, on peut continuer
+        if (error.code !== 'auth/user-not-found') {
+          throw error;
+        }
       }
 
       const tempPassword = uuidv4().substring(0, 12);
@@ -49,12 +52,14 @@ class UserService {
         invitedAt: new Date()
       });
 
-      await sendInvitationEmail({
-        email,
-        displayName,
-        inviteToken,
-        role
-      });
+      if (this.emailService) {
+        await this.emailService.sendInvitation({
+          email,
+          displayName,
+          inviteToken,
+          role
+        });
+      }
 
       return {
         success: true,
@@ -62,13 +67,13 @@ class UserService {
         userId: userRecord.uid
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to invite user: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer tous les utilisateurs
-   */
   async getAllUsers({ role, limit, page }) {
     try {
       let query = this.db.collection('users');
@@ -105,23 +110,16 @@ class UserService {
         }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch users: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer un utilisateur par ID
-   */
   async getUserById(id) {
     try {
       const doc = await this.db.collection('users').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'User not found'
-        };
+        throw new NotFoundError('User');
       }
 
       return {
@@ -133,13 +131,13 @@ class UserService {
         }
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to fetch user: ' + error.message);
     }
   }
 
-  /**
-   * Mettre à jour le rôle d'un utilisateur
-   */
   async updateUserRole(id, role) {
     try {
       await this.db.collection('users').doc(id).update({
@@ -152,23 +150,16 @@ class UserService {
         message: 'User role updated successfully'
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to update user role: ' + error.message);
     }
   }
 
-  /**
-   * Renvoyer l'invitation
-   */
   async resendInvitation(id) {
     try {
       const userDoc = await this.db.collection('users').doc(id).get();
 
       if (!userDoc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'User not found'
-        };
+        throw new NotFoundError('User');
       }
 
       const userData = userDoc.data();
@@ -179,25 +170,27 @@ class UserService {
         inviteResendAt: new Date()
       });
 
-      await sendInvitationEmail({
-        email: userData.email,
-        displayName: userData.displayName,
-        inviteToken: newInviteToken,
-        role: userData.role
-      });
+      if (this.emailService) {
+        await this.emailService.sendInvitation({
+          email: userData.email,
+          displayName: userData.displayName,
+          inviteToken: newInviteToken,
+          role: userData.role
+        });
+      }
 
       return {
         success: true,
         message: 'Invitation resent successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to resend invitation: ' + error.message);
     }
   }
 
-  /**
-   * Supprimer un utilisateur
-   */
   async deleteUser(id) {
     try {
       await this.auth.deleteUser(id);
@@ -208,9 +201,9 @@ class UserService {
         message: 'User deleted successfully'
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to delete user: ' + error.message);
     }
   }
 }
 
-module.exports = new UserService();
+module.exports = UserService;

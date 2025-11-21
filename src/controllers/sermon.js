@@ -1,152 +1,85 @@
-const SermonService = require('../services/sermon');
 const { validationResult } = require('express-validator');
+const { ValidationError } = require('../utils/errors');
+const { asyncHandler } = require('../middleware/errorHandler');
 
 class SermonController {
-  /**
-   * Créer un nouveau sermon
-   */
-  async create(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const result = await SermonService.createSermon(
-        req.body,
-        req.files,
-        req.user
-      );
-
-      res.status(201).json(result);
-    } catch (error) {
-      console.error('Error creating sermon:', error);
-      res.status(500).json({
-        error: 'Failed to create sermon',
-        message: error.message
-      });
+  create = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Récupérer tous les sermons
-   */
-  async getAll(req, res) {
-    try {
-      const { limit = 20, page = 1, year, month } = req.query;
+    const sermonService = req.container.get('sermonService');
+    const result = await sermonService.createSermon(req.body, req.files, req.user);
 
-      const result = await SermonService.getAllSermons({
-        limit: parseInt(limit),
-        page: parseInt(page),
-        year: year ? parseInt(year) : null,
-        month: month ? parseInt(month) : null
-      });
+    res.status(201).json(result);
+  });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching sermons:', error);
-      res.status(500).json({ error: 'Failed to fetch sermons' });
+  getAll = asyncHandler(async (req, res) => {
+    const { limit = 20, page = 1, year, month } = req.query;
+
+    const sermonService = req.container.get('sermonService');
+    const result = await sermonService.getAllSermons({
+      limit: parseInt(limit),
+      page: parseInt(page),
+      year: year ? parseInt(year) : null,
+      month: month ? parseInt(month) : null
+    });
+
+    res.json(result);
+  });
+
+  getById = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const sermonService = req.container.get('sermonService');
+    const result = await sermonService.getSermonById(id);
+
+    res.json(result);
+  });
+
+  update = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Récupérer un sermon par ID
-   */
-  async getById(req, res) {
-    try {
-      const { id } = req.params;
+    const { id } = req.params;
 
-      const result = await SermonService.getSermonById(id);
+    const sermonService = req.container.get('sermonService');
+    const result = await sermonService.updateSermon(id, req.body, req.user);
 
-      if (!result.success) {
-        return res.status(result.status || 404).json({ error: result.error });
-      }
+    res.json(result);
+  });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching sermon:', error);
-      res.status(500).json({ error: 'Failed to fetch sermon' });
-    }
-  }
+  delete = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-  /**
-   * Mettre à jour un sermon
-   */
-  async update(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+    const sermonService = req.container.get('sermonService');
+    const result = await sermonService.deleteSermon(id, req.user);
 
-      const { id } = req.params;
+    res.json(result);
+  });
 
-      const result = await SermonService.updateSermon(id, req.body, req.user);
+  incrementDownloads = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-      if (!result.success) {
-        return res.status(result.status || 400).json({ error: result.error });
-      }
+    const sermonService = req.container.get('sermonService');
+    const result = await sermonService.incrementDownloads(id);
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error updating sermon:', error);
-      res.status(500).json({ error: 'Failed to update sermon' });
-    }
-  }
+    res.json(result);
+  });
 
-  /**
-   * Supprimer un sermon
-   */
-  async delete(req, res) {
-    try {
-      const { id } = req.params;
+  getStats = asyncHandler(async (req, res) => {
+    const { year } = req.query;
 
-      const result = await SermonService.deleteSermon(id, req.user);
+    const sermonService = req.container.get('sermonService');
+    const result = await sermonService.getSermonStats({
+      year: year ? parseInt(year) : null
+    });
 
-      if (!result.success) {
-        return res.status(result.status || 400).json({ error: result.error });
-      }
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error deleting sermon:', error);
-      res.status(500).json({ error: 'Failed to delete sermon' });
-    }
-  }
-
-  /**
-   * Incrémenter les téléchargements
-   */
-  async incrementDownloads(req, res) {
-    try {
-      const { id } = req.params;
-
-      const result = await SermonService.incrementDownloads(id);
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error incrementing downloads:', error);
-      res.status(500).json({ error: 'Failed to increment downloads' });
-    }
-  }
-
-  /**
-   * Récupérer les statistiques
-   */
-  async getStats(req, res) {
-    try {
-      const { year } = req.query;
-
-      const result = await SermonService.getSermonStats({
-        year: year ? parseInt(year) : null
-      });
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching sermon stats:', error);
-      res.status(500).json({ error: 'Failed to fetch sermon stats' });
-    }
-  }
+    res.json(result);
+  });
 }
 
 module.exports = new SermonController();

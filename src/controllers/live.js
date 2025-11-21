@@ -1,60 +1,38 @@
-const LiveService = require('../services/live');
 const { validationResult } = require('express-validator');
+const { ValidationError } = require('../utils/errors');
+const { asyncHandler } = require('../middleware/errorHandler');
 
 class LiveController {
-  /**
-   * Récupérer le statut du LIVE
-   */
-  async getStatus(req, res) {
-    try {
-      const result = await LiveService.getLiveStatus();
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching live status:', error);
-      res.status(500).json({ error: 'Failed to fetch live status' });
+  getStatus = asyncHandler(async (req, res) => {
+    const liveService = req.container.get('liveService');
+    const result = await liveService.getLiveStatus();
+
+    res.json(result);
+  });
+
+  updateStatus = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Mettre à jour le statut du LIVE
-   */
-  async updateStatus(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+    const liveService = req.container.get('liveService');
+    const result = await liveService.updateLiveStatus(req.body, req.user);
 
-      const result = await LiveService.updateLiveStatus(req.body, req.user);
+    res.json(result);
+  });
 
-      res.json(result);
-    } catch (error) {
-      console.error('Error updating live status:', error);
-      res.status(500).json({
-        error: 'Failed to update live status',
-        message: error.message
-      });
+  sendNotification = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  }
 
-  /**
-   * Envoyer une notification manuelle
-   */
-  async sendNotification(req, res) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+    const liveService = req.container.get('liveService');
+    const result = await liveService.sendLiveNotification(req.body);
 
-      const result = await LiveService.sendLiveNotification(req.body);
-
-      res.json(result);
-    } catch (error) {
-      console.error('Error sending live notification:', error);
-      res.status(500).json({ error: 'Failed to send notification' });
-    }
-  }
+    res.json(result);
+  });
 }
 
 module.exports = new LiveController();

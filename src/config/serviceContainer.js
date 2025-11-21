@@ -23,10 +23,13 @@ class ServiceContainer {
     try {
       console.log('🚀 Initializing service container...');
 
+      // Valider la configuration
       appConfig.validate();
 
+      // Initialiser Firebase
       firebaseConfig.initialize();
 
+      // Initialiser l'email
       emailConfig.initialize();
 
       // Enregistrer les dépendances de base
@@ -38,7 +41,11 @@ class ServiceContainer {
       this.register('emailTransporter', emailConfig.getTransporter());
       this.register('config', appConfig);
 
+      // Initialiser les services métier
       this.initializeBusinessServices();
+
+      // Résoudre les dépendances circulaires
+      this.resolveDependencies();
 
       this.initialized = true;
       console.log('✅ Service container initialized successfully\n');
@@ -58,11 +65,11 @@ class ServiceContainer {
   initializeBusinessServices() {
     // Import des services
     const AudioService = require('../services/audio');
-    const UserService = require('../services/user');
     const SermonService = require('../services/sermon');
     const EventService = require('../services/event');
     const PostService = require('../services/post');
     const LiveService = require('../services/live');
+    const UserService = require('../services/user');
     const StatsService = require('../services/stats');
     const StorageService = require('../services/storage');
     const NotificationService = require('../services/notification');
@@ -79,21 +86,74 @@ class ServiceContainer {
       config: this.get('config')
     };
 
-    // Enregistrer les services
-    this.register('audioService', new AudioService(dependencies));
-    this.register('userService', new UserService(dependencies));
-    this.register('sermonService', new SermonService(dependencies));
-    this.register('eventService', new EventService(dependencies));
-    this.register('postService', new PostService(dependencies));
-    this.register('liveService', new LiveService(dependencies));
-    this.register('statsService', new StatsService(dependencies));
-    this.register('storageService', new StorageService(dependencies));
-    this.register('notificationService', new NotificationService(dependencies));
-    this.register('emailService', new EmailService(dependencies));
+    // Services de base (sans dépendances circulaires)
+    const storageService = new StorageService(dependencies);
+    const notificationService = new NotificationService(dependencies);
+    const emailService = new EmailService(dependencies);
+    const statsService = new StatsService(dependencies);
+
+    // Enregistrer les services de base
+    this.register('storageService', storageService);
+    this.register('notificationService', notificationService);
+    this.register('emailService', emailService);
+    this.register('statsService', statsService);
+
+    // Services métier (avec dépendances circulaires à résoudre)
+    const audioService = new AudioService(dependencies);
+    const sermonService = new SermonService(dependencies);
+    const eventService = new EventService(dependencies);
+    const postService = new PostService(dependencies);
+    const liveService = new LiveService(dependencies);
+    const userService = new UserService(dependencies);
+
+    // Enregistrer les services métier
+    this.register('audioService', audioService);
+    this.register('sermonService', sermonService);
+    this.register('eventService', eventService);
+    this.register('postService', postService);
+    this.register('liveService', liveService);
+    this.register('userService', userService);
 
     console.log('✅ Business services registered');
   }
 
+  /**
+   * Résoudre les dépendances circulaires entre services
+   */
+  resolveDependencies() {
+    const storageService = this.get('storageService');
+    const notificationService = this.get('notificationService');
+    const emailService = this.get('emailService');
+
+    // Injecter storage et notification dans les services qui en ont besoin
+    const audioService = this.get('audioService');
+    audioService.setStorageService(storageService);
+    audioService.setNotificationService(notificationService);
+
+    const sermonService = this.get('sermonService');
+    sermonService.setStorageService(storageService);
+    sermonService.setNotificationService(notificationService);
+
+    const eventService = this.get('eventService');
+    eventService.setStorageService(storageService);
+    eventService.setNotificationService(notificationService);
+
+    const postService = this.get('postService');
+    postService.setStorageService(storageService);
+    postService.setNotificationService(notificationService);
+
+    const liveService = this.get('liveService');
+    liveService.setNotificationService(notificationService);
+
+    const userService = this.get('userService');
+    userService.setEmailService(emailService);
+
+    console.log('✅ Dependencies resolved');
+  }
+
+  /**
+   * Enregistrer un service
+   */
   register(name, service) {
     if (this.services.has(name)) {
       console.warn(`⚠️  Service '${name}' is already registered. Overwriting...`);
@@ -101,6 +161,9 @@ class ServiceContainer {
     this.services.set(name, service);
   }
 
+  /**
+   * Récupérer un service
+   */
   get(name) {
     if (!this.services.has(name)) {
       throw new Error(`Service '${name}' not found in container`);
@@ -108,20 +171,28 @@ class ServiceContainer {
     return this.services.get(name);
   }
 
+  /**
+   * Vérifier si un service existe
+   */
   has(name) {
     return this.services.has(name);
   }
 
-
+  /**
+   * Obtenir tous les noms de services
+   */
   getServiceNames() {
     return Array.from(this.services.keys());
   }
 
-
+  /**
+   * Nettoyer le container
+   */
   clear() {
     this.services.clear();
     this.initialized = false;
   }
 }
 
+// Export singleton
 module.exports = new ServiceContainer();

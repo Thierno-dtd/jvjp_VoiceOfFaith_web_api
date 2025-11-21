@@ -1,27 +1,33 @@
-const admin = require('firebase-admin');
-const Event = require('../models/Event');
-const { uploadFileToStorage } = require('./storage');
-const { sendNotificationToTopic } = require('./notification');
+const {
+  NotFoundError,
+  ValidationError,
+  DatabaseError
+} = require('../utils/errors');
 
 class EventService {
-  constructor() {
-    this.db = admin.firestore();
+  constructor(dependencies) {
+    this.db = dependencies.db;
+    this.storageService = null;
+    this.notificationService = null;
   }
 
-  /**
-   * Créer un nouvel événement
-   */
+  setStorageService(storageService) {
+    this.storageService = storageService;
+  }
+
+  setNotificationService(notificationService) {
+    this.notificationService = notificationService;
+  }
+
   async createEvent(data, file, user) {
     try {
       const { title, description, startDate, endDate, location, dailySummaries } = data;
 
-      // Upload image si présente
       let imageUrl = null;
-      if (file) {
-        imageUrl = await uploadFileToStorage(file, 'events');
+      if (file && this.storageService) {
+        imageUrl = await this.storageService.uploadFile(file, 'events');
       }
 
-      // Parser les daily summaries
       let parsedDailySummaries = [];
       if (dailySummaries) {
         parsedDailySummaries = typeof dailySummaries === 'string' 
@@ -34,28 +40,29 @@ class EventService {
         }));
       }
 
-      // Créer l'événement
-      const eventData = Event.create({
+      const eventData = {
         title,
         description,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         imageUrl: imageUrl || '',
         location,
-        dailySummaries: parsedDailySummaries
-      });
+        dailySummaries: parsedDailySummaries,
+        createdAt: new Date()
+      };
 
-      const docRef = await this.db.collection(Event.collection).add(eventData);
+      const docRef = await this.db.collection('events').add(eventData);
 
-      // Envoyer notification
-      await sendNotificationToTopic('all_users', {
-        title: '📅 Nouvel événement',
-        body: title,
-        data: {
-          type: 'event',
-          eventId: docRef.id
-        }
-      });
+      if (this.notificationService) {
+        await this.notificationService.sendToTopic('all_users', {
+          title: '📅 Nouvel événement',
+          body: title,
+          data: {
+            type: 'event',
+            eventId: docRef.id
+          }
+        });
+      }
 
       return {
         success: true,
@@ -63,16 +70,16 @@ class EventService {
         eventId: docRef.id
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to create event: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer tous les événements
-   */
   async getAllEvents({ limit, page, upcoming }) {
     try {
-      let query = this.db.collection(Event.collection);
+      let query = this.db.collection('events');
 
       if (upcoming) {
         query = query.where('startDate', '>=', new Date());
@@ -103,29 +110,19 @@ class EventService {
       return {
         success: true,
         events,
-        pagination: {
-          page,
-          limit
-        }
+        pagination: { page, limit }
       };
     } catch (error) {
-      throw error;
+      throw new DatabaseError('Failed to fetch events: ' + error.message);
     }
   }
 
-  /**
-   * Récupérer un événement par ID
-   */
   async getEventById(id) {
     try {
-      const doc = await this.db.collection(Event.collection).doc(id).get();
+      const doc = await this.db.collection('events').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Event not found'
-        };
+        throw new NotFoundError('Event');
       }
 
       const data = doc.data();
@@ -144,26 +141,22 @@ class EventService {
         }
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to fetch event: ' + error.message);
     }
   }
 
-  /**
-   * Mettre à jour un événement
-   */
   async updateEvent(id, data, file) {
     try {
-      const doc = await this.db.collection(Event.collection).doc(id).get();
+      const doc = await this.db.collection('events').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Event not found'
-        };
+        throw new NotFoundError('Event');
       }
 
-      const updateData = Event.update({});
+      const updateData = { updatedAt: new Date() };
 
       if (data.title) updateData.title = data.title;
       if (data.description) updateData.description = data.description;
@@ -171,12 +164,10 @@ class EventService {
       if (data.endDate) updateData.endDate = new Date(data.endDate);
       if (data.location) updateData.location = data.location;
 
-      // Upload nouvelle image si fournie
-      if (file) {
-        updateData.imageUrl = await uploadFileToStorage(file, 'events');
+      if (file && this.storageService) {
+        updateData.imageUrl = await this.storageService.uploadFile(file, 'events');
       }
 
-      // Update daily summaries
       if (data.dailySummaries) {
         let parsedSummaries = typeof data.dailySummaries === 'string' 
           ? JSON.parse(data.dailySummaries)
@@ -188,42 +179,41 @@ class EventService {
         }));
       }
 
-      await this.db.collection(Event.collection).doc(id).update(updateData);
+      await this.db.collection('events').doc(id).update(updateData);
 
       return {
         success: true,
         message: 'Event updated successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to update event: ' + error.message);
     }
   }
 
-  /**
-   * Supprimer un événement
-   */
   async deleteEvent(id) {
     try {
-      const doc = await this.db.collection(Event.collection).doc(id).get();
+      const doc = await this.db.collection('events').doc(id).get();
 
       if (!doc.exists) {
-        return {
-          success: false,
-          status: 404,
-          error: 'Event not found'
-        };
+        throw new NotFoundError('Event');
       }
 
-      await this.db.collection(Event.collection).doc(id).delete();
+      await this.db.collection('events').doc(id).delete();
 
       return {
         success: true,
         message: 'Event deleted successfully'
       };
     } catch (error) {
-      throw error;
+      if (error.isOperational) {
+        throw error;
+      }
+      throw new DatabaseError('Failed to delete event: ' + error.message);
     }
   }
 }
 
-module.exports = new EventService();
+module.exports = EventService;
