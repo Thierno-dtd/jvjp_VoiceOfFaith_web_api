@@ -1,83 +1,61 @@
 const { validationResult } = require('express-validator');
-const AuthService = require('../services/auth');
+const { ValidationError } = require('../utils/errors');
+const { asyncHandler } = require('../middleware/errorHandler');
 
-module.exports = {
-
-  login: async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const result = await AuthService.login(req);
-
-      res.json(result);
-
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: error.message });
+class AuthController {
+  login = asyncHandler(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Validation failed', errors.array());
     }
-  },
 
-  refreshToken: async (req, res) => {
-    try {
-      const result = await AuthService.refreshToken(req);
-      res.json(result);
-    } catch (error) {
-      console.error('Refresh error:', error);
-      res.status(401).json({ error: error.message });
-    }
-  },
+    const authService = req.container.get('authService');
+    const result = await authService.login(req);
 
-  logout: async (req, res) => {
-    try {
-      const result = await AuthService.logout(req);
-      res.json(result);
-    } catch (error) {
-      console.error('Logout error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  },
+    res.json(result);
+  });
 
-  generateCustomToken: async (req, res) => {
-    try {
-      const result = await AuthService.generateCustomToken(req);
-      res.json(result);
-    } catch (error) {
-      console.error('Custom token error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  },
+  refreshToken = asyncHandler(async (req, res) => {
+    const authService = req.container.get('authService');
+    const result = await authService.refreshToken(req);
 
-  resetPassword: async (req, res) => {
-    try {
-      const result = await AuthService.resetPassword(req);
-      res.json(result);
-    } catch (error) {
-      console.error('Reset error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  },
+    res.json(result);
+  });
 
-  verifyToken: async (req, res) => {
-    try {
-      const result = await AuthService.verifyToken(req);
-      res.json(result);
-    } catch (error) {
-      console.error('Verify error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  },
+  logout = asyncHandler(async (req, res) => {
+    const authService = req.container.get('authService');
+    const result = await authService.logout(req);
 
-  getMe: async (req, res) => {
-    try {
-      res.json({
-        success: true,
-        user: req.user
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch user' });
-    }
-  }
-};
+    res.json(result);
+  });
+
+  generateCustomToken = asyncHandler(async (req, res) => {
+    const authService = req.container.get('authService');
+    const result = await authService.generateCustomToken(req);
+
+    res.json(result);
+  });
+
+  resetPassword = asyncHandler(async (req, res) => {
+    const authService = req.container.get('authService');
+    const result = await authService.resetPassword(req);
+
+    res.json(result);
+  });
+
+  verifyToken = asyncHandler(async (req, res) => {
+    const authService = req.container.get('authService');
+    const result = await authService.verifyToken(req);
+
+    res.json(result);
+  });
+
+  getMe = asyncHandler(async (req, res) => {
+    res.json({
+      success: true,
+      user: req.user
+    });
+  });
+}
+
+module.exports = new AuthController();

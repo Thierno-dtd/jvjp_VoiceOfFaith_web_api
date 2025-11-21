@@ -64,6 +64,7 @@ class ServiceContainer {
    */
   initializeBusinessServices() {
     // Import des services
+    const AuthService = require('../services/auth');
     const AudioService = require('../services/audio');
     const SermonService = require('../services/sermon');
     const EventService = require('../services/event');
@@ -99,6 +100,7 @@ class ServiceContainer {
     this.register('statsService', statsService);
 
     // Services métier (avec dépendances circulaires à résoudre)
+    const authService = new AuthService(dependencies);
     const audioService = new AudioService(dependencies);
     const sermonService = new SermonService(dependencies);
     const eventService = new EventService(dependencies);
@@ -107,6 +109,7 @@ class ServiceContainer {
     const userService = new UserService(dependencies);
 
     // Enregistrer les services métier
+    this.register('authService', authService);
     this.register('audioService', audioService);
     this.register('sermonService', sermonService);
     this.register('eventService', eventService);

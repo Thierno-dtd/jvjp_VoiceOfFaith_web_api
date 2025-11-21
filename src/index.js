@@ -34,6 +34,7 @@ async function startServer() {
 
     const app = express();
 
+    app.use(express.static(__dirname + '/public'));
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
     app.use(helmet());
     app.use(cors(appConfig.getCorsConfig()));
