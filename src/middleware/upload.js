@@ -13,7 +13,7 @@ const imageFilter = (req, file, cb) => {
 };
 
 const audioFilter = (req, file, cb) => {
-  const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a'];
+  const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a','audio/mp4', 'audio/x-m4a', 'audio/aac'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
