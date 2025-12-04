@@ -23,6 +23,7 @@ const eventRoutes = require('./routes/event');
 const postRoutes = require('./routes/post');
 const statsRoutes = require('./routes/stats');
 const liveRoutes = require('./routes/live');
+const DonationRoutes = require('./routes/donation');
 
 handleUncaughtExceptions();
 
@@ -76,6 +77,7 @@ async function startServer() {
     app.use('/api/posts', postRoutes);
     app.use('/api/admin/stats', statsRoutes);
     app.use('/api/admin/live', liveRoutes);
+    app.use('/api/admin/donations', DonationRoutes);
 
     // Route 404
     app.use(notFoundHandler);

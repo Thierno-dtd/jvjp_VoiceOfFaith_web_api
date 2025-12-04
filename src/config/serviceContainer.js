@@ -71,6 +71,7 @@ class ServiceContainer {
     const PostService = require('../services/post');
     const LiveService = require('../services/live');
     const UserService = require('../services/user');
+    const DonationService = require('../services/donation');
     const StatsService = require('../services/stats');
     const StorageService = require('../services/storage');
     const NotificationService = require('../services/notification');
@@ -107,6 +108,7 @@ class ServiceContainer {
     const postService = new PostService(dependencies);
     const liveService = new LiveService(dependencies);
     const userService = new UserService(dependencies);
+    const donationService = new DonationService(dependencies);
 
     // Enregistrer les services métier
     this.register('authService', authService);
@@ -116,6 +118,7 @@ class ServiceContainer {
     this.register('postService', postService);
     this.register('liveService', liveService);
     this.register('userService', userService);
+    this.register('donationService', donationService);
 
     console.log('✅ Business services registered');
   }
