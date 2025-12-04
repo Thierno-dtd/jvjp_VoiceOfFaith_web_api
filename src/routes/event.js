@@ -84,6 +84,16 @@ router.post(
   '/',
   verifyModeratorToken,
   uploadSingle('image'),
+  (req, res, next) => {
+    if (req.body.dailySummaries && typeof req.body.dailySummaries === 'string') {
+      try {
+        req.body.dailySummaries = JSON.parse(req.body.dailySummaries);
+      } catch (err) {
+        return res.status(400).json({ message: 'Invalid dailySummaries format' });
+      }
+    }
+    next();
+  },
   eventValidators.create,
   EventController.create
 );
